@@ -1,0 +1,48 @@
+features:
+  diskEncryption: false
+kind: Cluster
+kubernetes:
+  version: v1.33.5
+name: libvirt-provider-test
+patches:
+- inline:
+    debug: true
+  name: debug
+# - inline:
+#     machine:
+#       registries:
+#         mirrors:
+#           docker.io:
+#             endpoints:
+#               - http://192.168.200.1:5000
+#           gcr.io:
+#             endpoints:
+#               - http://192.168.200.1:5003
+#           ghcr.io:
+#             endpoints:
+#               - http://192.168.200.1:5004
+#           registry.k8s.io:
+#             endpoints:
+#               - http://192.168.200.1:5001
+#           factory.talos.dev:
+#             endpoints:
+#               - http://192.168.200.1:5005
+#   name: registries
+talos:
+  version: v1.10.6
+---
+kind: ControlPlane
+machineClass:
+  name: libvirt-small
+  size: 3
+patches:
+- inline:
+    cluster:
+      allowSchedulingOnControlPlanes: true
+  name: cp-schedulable
+---
+kind: Workers
+name: worker
+machineClass:
+  name: libvirt-small
+  size: 3

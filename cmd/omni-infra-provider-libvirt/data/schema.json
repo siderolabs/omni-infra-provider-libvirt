@@ -1,0 +1,34 @@
+{
+  "type": "object",
+  "properties": {
+    "cores": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "memory": {
+      "type": "integer",
+      "minimum": 2048,
+      "description": "In MB"
+    },
+    "disk_size": {
+      "type": "integer",
+      "minimum": 10,
+      "description": "In GB"
+    },
+    "storage_pool": {
+      "type": "string",
+      "description": "libvirt storage pool name"
+    },
+    "network": {
+      "type": "string",
+      "description": "libvirt network name"
+    }
+  },
+  "required": [
+    "cores",
+    "memory",
+    "disk_size",
+    "storage_pool",
+    "network"
+  ]
+}
