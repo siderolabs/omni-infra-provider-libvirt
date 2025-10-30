@@ -119,7 +119,7 @@ const file_specs_specs_proto_rawDesc = "" +
 	"\vvm_vol_name\x18\n" +
 	" \x01(\tR\tvmVolName\x12\x1b\n" +
 	"\tpool_name\x18\x14 \x01(\tR\bpoolName\x12\x17\n" +
-	"\avm_name\x18\x15 \x01(\tR\x06vmNameB=Z;github.com/siderolabs/omni-infra-provider-proxmox/api/specsb\x06proto3"
+	"\avm_name\x18\x15 \x01(\tR\x06vmNameB=Z;github.com/siderolabs/omni-infra-provider-libvirt/api/specsb\x06proto3"
 
 var (
 	file_specs_specs_proto_rawDescOnce sync.Once

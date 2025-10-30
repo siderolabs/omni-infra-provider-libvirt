@@ -9,5 +9,5 @@ spec:
       cores: 2
       memory: 4096 # in MB
       disk_size: 20 # in GB
-      storage_pool: "default"
+      storage_pool: "vmstorage"
       network: "default"

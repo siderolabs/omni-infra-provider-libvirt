@@ -8,12 +8,12 @@
     "memory": {
       "type": "integer",
       "minimum": 2048,
-      "description": "In MB"
+      "description": "In MiB"
     },
     "disk_size": {
       "type": "integer",
       "minimum": 10,
-      "description": "In GB"
+      "description": "In GiB"
     },
     "storage_pool": {
       "type": "string",

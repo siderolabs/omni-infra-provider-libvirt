@@ -1,7 +1,7 @@
 syntax = "proto3";
 package emuspecs;
 
-option go_package = "github.com/siderolabs/omni-infra-provider-proxmox/api/specs";
+option go_package = "github.com/siderolabs/omni-infra-provider-libvirt/api/specs";
 
 // MachineSpec is stored in Omni in the infra provisioner state.
 message MachineSpec {

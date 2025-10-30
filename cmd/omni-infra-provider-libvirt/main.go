@@ -70,9 +70,13 @@ var rootCmd = &cobra.Command{
 
 		libvirtConfig := config.LibVirt
 
+		//nolint:errcheck
 		uri, _ := url.Parse(string(libvirt.QEMUSystem))
 		if libvirtConfig.URI != "" {
-			uri, _ = url.Parse(string(libvirtConfig.URI))
+			uri, err = url.Parse(libvirtConfig.URI)
+			if err != nil {
+				return fmt.Errorf("bad libvirt connection URI: %s", libvirtConfig.URI)
+			}
 		}
 
 		logger.Info("libvirt URI", zap.String("URI", uri.String()))
@@ -85,7 +89,8 @@ var rootCmd = &cobra.Command{
 		if !libvirtClient.IsConnected() {
 			return errors.New("client is not connected")
 		}
-		if ver, err := libvirtClient.ConnectGetVersion(); err != nil {
+		ver, err := libvirtClient.ConnectGetVersion()
+		if err != nil {
 			return fmt.Errorf("error fetching version: %w", err)
 		} else {
 			logger.Info(fmt.Sprintf("libvirtVersion: %d", ver))

@@ -46,15 +46,16 @@ func NewProvisioner(libvirtClient *libvirt.Libvirt) *Provisioner {
 }
 
 var (
-	timeout        = time.Second * 120
-	downloadIsoErr = errors.New("error downloading image")
-	createVolErr   = errors.New("error creating volume")
-	uploadIsoErr   = errors.New("error uploading image")
-	volNoExist     = errors.New("volume does not exist")
+	timeout          = time.Second * 120
+	errDownloadImage = errors.New("error downloading image")
+	errCreateVol     = errors.New("error creating volume")
+	errUploadImage   = errors.New("error uploading image")
+	errVolNoExist    = errors.New("volume does not exist")
 )
 
 func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, error) {
 	var vol libvirt.StorageVol
+
 	pool, err := lc.StoragePoolLookupByName(poolName)
 	if err != nil {
 		return vol, fmt.Errorf("getvol: %w", err)
@@ -64,7 +65,7 @@ func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, 
 	if err != nil {
 		// TODO: there is probably a better way to check this
 		if strings.Contains(err.Error(), "Storage volume not found") {
-			return vol, volNoExist
+			return vol, errVolNoExist
 		}
 
 		return vol, err
@@ -75,13 +76,14 @@ func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, 
 
 func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uint64) (libvirt.StorageVol, error) {
 	if vol, err := getVol(lc, poolName, volumeName); err == nil {
-		return vol, err
+		return vol, nil
 	}
 
 	var vol libvirt.StorageVol
+
 	pool, err := lc.StoragePoolLookupByName(poolName)
 	if err != nil {
-		return vol, fmt.Errorf("%w: %w", createVolErr, err)
+		return vol, fmt.Errorf("%w: %w", errCreateVol, err)
 	}
 
 	volData := libvirtxml.StorageVolume{
@@ -101,14 +103,15 @@ func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uin
 			},
 		},
 	}
+
 	volXML, err := volData.Marshal()
 	if err != nil {
-		return vol, fmt.Errorf("%w, error rendering XML: %w", createVolErr, err)
+		return vol, fmt.Errorf("%w, error rendering XML: %w", errCreateVol, err)
 	}
 
 	vol, err = lc.StorageVolCreateXML(pool, volXML, 0)
 	if err != nil {
-		return vol, fmt.Errorf("%w: error creating volume: %w", createVolErr, err)
+		return vol, fmt.Errorf("%w: error creating volume: %w", errCreateVol, err)
 	}
 
 	return vol, nil
@@ -119,6 +122,27 @@ func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uin
 //nolint:gocognit,gocyclo,cyclop,maintidx
 func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 	return []provision.Step[*resources.Machine]{
+		provision.NewStep(
+			"generateUUID",
+			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+				newUUID := uuid.New()
+
+				dom, err := p.libvirtClient.DomainLookupByUUID(libvirt.UUID(newUUID))
+				if err != nil {
+					if dom.UUID != libvirt.UUID(newUUID) {
+						// found unused UUID
+						pctx.State.TypedSpec().Value.Uuid = newUUID.String()
+						pctx.SetMachineUUID(pctx.State.TypedSpec().Value.Uuid)
+
+						return nil
+					}
+
+					return provision.NewRetryError(err, time.Second*10)
+				}
+
+				return provision.NewRetryInterval(time.Second * 1)
+			},
+		),
 		provision.NewStep(
 			"createSchematic",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -161,7 +185,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							"metal-amd64.qcow2.gz",
 						)
 
-						req, err := http.NewRequest(http.MethodGet, imageURL.String(), nil)
+						reqCtx := context.WithoutCancel(ctx)
+
+						req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, imageURL.String(), nil)
 						if err != nil {
 							return fmt.Errorf("error creating request: %w", err)
 						}
@@ -177,10 +203,12 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						if err != nil {
 							return provision.NewRetryErrorf(time.Second*10, "error fetching image: %w", err)
 						}
+						//nolint:errcheck
+						defer res.Body.Close()
 
 						imageData, err := io.ReadAll(res.Body)
 						if err != nil {
-							return provision.NewRetryErrorf(time.Second*10, "%w: error reading response body: %w", downloadIsoErr, err)
+							return provision.NewRetryErrorf(time.Second*10, "%w: error reading response body: %w", errDownloadImage, err)
 						}
 
 						err = os.WriteFile(filePath, imageData, 0o740)
@@ -200,6 +228,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			"provisionDisk",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 				var data Data
+
 				err := pctx.UnmarshalProviderData(&data)
 				if err != nil {
 					return err
@@ -207,7 +236,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 				vmName := pctx.GetRequestID()
 				volName := fmt.Sprintf("%s.qcow2", vmName)
-				vol, err := createVolume(p.libvirtClient, data.StoragePool, volName, uint64(data.DiskSize))
+				pctx.State.TypedSpec().Value.PoolName = data.StoragePool
+
+				vol, err := createVolume(p.libvirtClient, data.StoragePool, volName, data.DiskSize)
 				if err != nil {
 					return fmt.Errorf("error creating disk: %w", err)
 				}
@@ -215,10 +246,12 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				outDir := "/tmp"
 				fileName := fmt.Sprintf("%s.qcow2.gz", pctx.State.TypedSpec().Value.SchematicId)
 				filePath := path.Join(outDir, fileName)
+
 				fh, err := os.Open(filePath)
 				if err != nil {
 					return fmt.Errorf("error opening local disk image: %w", err)
 				}
+
 				r, err := gzip.NewReader(fh)
 				if err != nil {
 					return fmt.Errorf("error opening gzip image reader: %w", err)
@@ -226,10 +259,11 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 				err = p.libvirtClient.StorageVolUpload(vol, r, 0, 0, 0)
 				if err != nil {
-					return fmt.Errorf("error uploading disk image: %w", err)
+					return fmt.Errorf("%w: %w", errUploadImage, err)
 				}
 
 				volSize := data.DiskSize * GiB
+
 				err = p.libvirtClient.StorageVolResize(vol, volSize, 0)
 				if err != nil {
 					return fmt.Errorf("expanding volume %s to size %d failed", volName, volSize)
@@ -258,17 +292,14 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				}
 
 				var data Data
+
 				err := pctx.UnmarshalProviderData(&data)
 				if err != nil {
 					return err
 				}
 
-				if pctx.State.TypedSpec().Value.Uuid == "" {
-					pctx.State.TypedSpec().Value.Uuid = uuid.NewString()
-					pctx.SetMachineUUID(pctx.State.TypedSpec().Value.Uuid)
-				}
-
 				vmName := pctx.GetRequestID()
+
 				vol, err := getVol(p.libvirtClient, data.StoragePool, volName)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error fetching volume: %w", err)
@@ -282,14 +313,18 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					UUID: pctx.State.TypedSpec().Value.Uuid,
 					Memory: &libvirtxml.DomainMemory{
 						Unit:  "MiB",
-						Value: uint(data.Memory), // KiB
+						Value: data.Memory,
 					},
 					VCPU: &libvirtxml.DomainVCPU{
 						Placement: "static",
-						Value:     uint(data.Cores),
+						Value:     data.Cores,
 					},
 					OS: &libvirtxml.DomainOS{
-						Type: &libvirtxml.DomainOSType{Arch: "x86_64", Machine: "q35", Type: "hvm"},
+						Type: &libvirtxml.DomainOSType{
+							Arch:    "x86_64",
+							Machine: "q35",
+							Type:    "hvm",
+						},
 						BootDevices: []libvirtxml.DomainBootDevice{
 							{Dev: "hd"},
 						},
@@ -321,30 +356,49 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						Disks: []libvirtxml.DomainDisk{
 							{
 								Device: "disk",
-								Driver: &libvirtxml.DomainDiskDriver{Name: "qemu", Type: "qcow2"},
+								Driver: &libvirtxml.DomainDiskDriver{
+									Name:  "qemu",
+									Type:  "qcow2",
+									Cache: "none",
+									IO:    "native",
+								},
 								Source: &libvirtxml.DomainDiskSource{
 									Volume: &libvirtxml.DomainDiskSourceVolume{
 										Pool:   vol.Pool,
 										Volume: vol.Name,
 									},
 								},
-								Target: &libvirtxml.DomainDiskTarget{Dev: "vda", Bus: "virtio"},
+								Target: &libvirtxml.DomainDiskTarget{
+									Dev: "vda",
+									Bus: "virtio",
+								},
 							},
 						},
 						Interfaces: []libvirtxml.DomainInterface{
 							{
-								Model: &libvirtxml.DomainInterfaceModel{Type: "virtio"},
+								Model: &libvirtxml.DomainInterfaceModel{
+									Type: "virtio",
+								},
 								Source: &libvirtxml.DomainInterfaceSource{
-									Network: &libvirtxml.DomainInterfaceSourceNetwork{Network: data.Network},
+									Network: &libvirtxml.DomainInterfaceSourceNetwork{
+										Network: data.Network,
+									},
 								},
 							},
 						},
+						MemBalloon: &libvirtxml.DomainMemBalloon{
+							Model: "virtio",
+						},
 						Serials: []libvirtxml.DomainSerial{
-							//{ Target: &libvirtxml.DomainSerialTarget{Type: "pty",}},
+							// { Target: &libvirtxml.DomainSerialTarget{Type: "pty",}},
 						},
 						Consoles: []libvirtxml.DomainConsole{
-							{Target: &libvirtxml.DomainConsoleTarget{Type: "serial"}},
-							//{Target: &libvirtxml.DomainConsoleTarget{Type: "virtio"}},
+							{
+								Target: &libvirtxml.DomainConsoleTarget{
+									Type: "serial",
+								},
+							},
+							// {Target: &libvirtxml.DomainConsoleTarget{Type: "virtio"}},
 						},
 						Videos: []libvirtxml.DomainVideo{
 							{
@@ -358,16 +412,21 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							},
 						},
 						Graphics: []libvirtxml.DomainGraphic{
-							{VNC: &libvirtxml.DomainGraphicVNC{AutoPort: "yes"}},
+							{
+								Spice: &libvirtxml.DomainGraphicSpice{
+									AutoPort: "yes",
+								},
+							},
 						},
 					},
 				}
+
 				domXML, err := domData.Marshal()
 				if err != nil {
 					return fmt.Errorf("error rendering domain XML: %w", err)
 				}
 
-				//log.Println(domXML)
+				// log.Println(domXML)
 
 				if pctx.State.TypedSpec().Value.Uuid == "" {
 					pctx.State.TypedSpec().Value.Uuid = uuid.NewString()
@@ -390,6 +449,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			"startVM",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 				vmName := pctx.State.TypedSpec().Value.VmName
+
 				dom, err := p.libvirtClient.DomainLookupByName(vmName)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "VM lookup failed: %w", err)
@@ -399,6 +459,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error fetching domain state: %w", err)
 				}
+
 				if libvirt.DomainState(domState) == libvirt.DomainRunning {
 					return nil
 				}
@@ -418,12 +479,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 // Deprovision implements infra.Provisioner.
 func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machine *resources.Machine, machineRequest *infra.MachineRequest) error {
-	var vmName string
-	if machine == nil {
-		vmName = machineRequest.Metadata().ID()
-	} else {
-		vmName = machine.TypedSpec().Value.VmName
-	}
+	vmName := machineRequest.Metadata().ID()
 
 	if vmName == "" {
 		return provision.NewRetryError(errors.New("empty vmName"), time.Second*10)
@@ -433,31 +489,55 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	if err != nil {
 		if strings.Contains(err.Error(), "Domain not found") {
 			logger.Info("domain was alredy removed: " + vmName)
-			return nil
 		} else {
 			return fmt.Errorf("error fetching domain: %w", err)
 		}
-	}
-	logger.Info("found domain " + vmName)
+	} else {
+		logger.Info("found domain " + vmName)
 
-	if err := p.libvirtClient.DomainDestroy(dom); err != nil {
-		return fmt.Errorf("error shutting down domain: %w", err)
-	}
-	logger.Info("destroyed domain " + vmName)
-
-	if err := p.libvirtClient.DomainUndefine(dom); err != nil {
-		return fmt.Errorf("error undefining VM: %w", err)
-	}
-	logger.Info("undefined domain " + vmName)
-
-	if machine != nil {
-		_, err = getVol(p.libvirtClient, machine.TypedSpec().Value.PoolName, machine.TypedSpec().Value.VmVolName)
+		err = p.libvirtClient.DomainDestroy(dom)
 		if err != nil {
-			if !errors.Is(err, volNoExist) {
-				return fmt.Errorf("error removing volume: %w", err)
-			}
+			return fmt.Errorf("error shutting down domain: %w", err)
 		}
+
+		logger.Info("destroyed domain " + vmName)
+
+		err = p.libvirtClient.DomainUndefine(dom)
+		if err != nil {
+			return fmt.Errorf("error undefining VM: %w", err)
+		}
+
+		logger.Info("undefined domain " + vmName)
 	}
+
+	if machine == nil {
+		return provision.NewRetryError(errors.New("machine == nil"), time.Second*10)
+	}
+
+	poolName := machine.TypedSpec().Value.PoolName
+	volName := machine.TypedSpec().Value.VmVolName
+
+	if poolName == "" || volName == "" {
+		return fmt.Errorf("empty pool/vol names: %s/%s", poolName, volName)
+	}
+
+	vol, err := getVol(p.libvirtClient, poolName, volName)
+	if err != nil {
+		if !errors.Is(err, errVolNoExist) {
+			return fmt.Errorf("error fetching volume: %w", err)
+		}
+
+		logger.Info("volume was removed already: " + volName)
+
+		return nil
+	}
+
+	err = p.libvirtClient.StorageVolDelete(vol, 0)
+	if err != nil {
+		return fmt.Errorf("error deleting volume: %w", err)
+	}
+
+	logger.Info("removed volume: " + volName)
 
 	return nil
 }
