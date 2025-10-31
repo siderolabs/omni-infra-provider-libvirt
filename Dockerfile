@@ -2,7 +2,7 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-10-28T14:27:21Z by kres 46e133d.
+# Generated on 2025-10-31T15:20:18Z by kres cd5a938.
 
 ARG TOOLCHAIN
 
@@ -84,7 +84,7 @@ FROM tools AS proto-compile
 COPY --from=proto-specs / /
 RUN protoc -I/api --go_out=paths=source_relative:/api --go-grpc_out=paths=source_relative:/api --go-vtproto_out=paths=source_relative:/api --go-vtproto_opt=features=marshal+unmarshal+size+equal+clone /api/specs/specs.proto
 RUN rm /api/specs/specs.proto
-RUN goimports -w -local github.com/siderolabs/omni-infra-provider-proxmox /api
+RUN goimports -w -local github.com/siderolabs/omni-infra-provider-libvirt /api
 RUN gofumpt -w /api
 
 # runs gofumpt
