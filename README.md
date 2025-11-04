@@ -2,33 +2,42 @@
 
 Can be used to automatically provision Talos nodes in `libvirtd`.
 
-## Running Infrastructure Provider
+## Configuration
 
-Create the configuration file for the provider.
+In your Omni instance under Settings -> Infra Providers, create a new `libvirt` provider.
+Make a note of the `OMNI_ENDPOINT` and `OMNI_SERVICE_ACCOUNT_KEY`.
+
+We now show various ways to connect to libvirt.
 For more options see the [libvirt URI docs](https://libvirt.org/uri.html)
 
-### connect to libvirt via ssh
+### Connecting to libvirt via ssh
 
-you must ensure to mount the proper SSH keys.
-this also requires the SSH user to have access to libvirt on the server side.
+You must ensure to mount the proper SSH keys.
+This also requires the SSH user to have access to libvirt on the server side.
+
+Create the configuration file for the provider:
 
 ```yaml
 libvirt:
   uri: 'qemu+libssh://user@hostname/system?known_hosts_verify=ignore'
 ```
 
-### connect to libvirt via socket
+### Connecting to libvirt via socket
 
-this requires to mount the libvirt socket into the container.
+If using Docker, this requires to mount the libvirt socket into the container.
 
 ```yaml
 libvirt:
   uri: 'qemu:///system'
+  # If using libvirt via Homebrew on MacOS:
+  # url: 'qemu:///session?socket=/Users/<username>/.cache/libvirt/libvirt-sock'
 ```
+
+## Running the provider
 
 ### Using Docker
 
-copy the provider credentials created in omni to an `.env` file
+Copy the provider credentials created in omni to an `.env` file
 
 ```env
 # your omni instance URL
@@ -37,7 +46,7 @@ OMNI_ENDPOINT=https://<OMNI_INSTANCE_NAME>.<REGION>.omni.siderolabs.io
 OMNI_SERVICE_ACCOUNT_KEY=<PROVIDER_KEY>
 ```
 
-example for using the above `ssh` based connection method:
+Example for using the above `ssh` based connection method:
 
 ```shell
 docker run \
@@ -52,7 +61,7 @@ docker run \
     --config-file /config.yaml
 ```
 
-example for using the above `socket` based connection method:
+Example for using the above `socket` based connection method:
 
 > **_NOTE:_**
 > don't blindly copy-paste this, the location might vary depending on your linux distribution.
@@ -71,16 +80,23 @@ docker run \
     --config-file /config.yaml
 ```
 
-## how to use in omni cluster templates
+## How to use in an Omni cluster templates
 
-see [test/](./test/) for some examples
+See [test/](./test/) for some examples
 
-## development
+## Development
 
-see `make help` for general build info.
+See `make help` for general build info.
 
-build an image:
+Build an image:
 
 ```shell
 make generate image-omni-infra-provider-libvirt-linux-amd64
+```
+
+Build the binary:
+
+```shell
+# e.g. for darwin
+make omni-infra-provider-libvirt-darwin-arm64
 ```

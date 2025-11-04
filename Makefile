@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-10-31T15:20:18Z by kres cd5a938.
+# Generated on 2025-11-04T12:33:37Z by kres cd5a938.
 
 # common variables
 
@@ -198,6 +198,20 @@ unit-tests:  ## Performs unit tests
 unit-tests-race:  ## Performs unit tests with race detection enabled.
 	@$(MAKE) target-$@
 
+.PHONY: $(ARTIFACTS)/omni-infra-provider-libvirt-darwin-amd64
+$(ARTIFACTS)/omni-infra-provider-libvirt-darwin-amd64:
+	@$(MAKE) local-omni-infra-provider-libvirt-darwin-amd64 DEST=$(ARTIFACTS)
+
+.PHONY: omni-infra-provider-libvirt-darwin-amd64
+omni-infra-provider-libvirt-darwin-amd64: $(ARTIFACTS)/omni-infra-provider-libvirt-darwin-amd64  ## Builds executable for omni-infra-provider-libvirt-darwin-amd64.
+
+.PHONY: $(ARTIFACTS)/omni-infra-provider-libvirt-darwin-arm64
+$(ARTIFACTS)/omni-infra-provider-libvirt-darwin-arm64:
+	@$(MAKE) local-omni-infra-provider-libvirt-darwin-arm64 DEST=$(ARTIFACTS)
+
+.PHONY: omni-infra-provider-libvirt-darwin-arm64
+omni-infra-provider-libvirt-darwin-arm64: $(ARTIFACTS)/omni-infra-provider-libvirt-darwin-arm64  ## Builds executable for omni-infra-provider-libvirt-darwin-arm64.
+
 .PHONY: $(ARTIFACTS)/omni-infra-provider-libvirt-linux-amd64
 $(ARTIFACTS)/omni-infra-provider-libvirt-linux-amd64:
 	@$(MAKE) local-omni-infra-provider-libvirt-linux-amd64 DEST=$(ARTIFACTS)
@@ -205,8 +219,15 @@ $(ARTIFACTS)/omni-infra-provider-libvirt-linux-amd64:
 .PHONY: omni-infra-provider-libvirt-linux-amd64
 omni-infra-provider-libvirt-linux-amd64: $(ARTIFACTS)/omni-infra-provider-libvirt-linux-amd64  ## Builds executable for omni-infra-provider-libvirt-linux-amd64.
 
+.PHONY: $(ARTIFACTS)/omni-infra-provider-libvirt-linux-arm64
+$(ARTIFACTS)/omni-infra-provider-libvirt-linux-arm64:
+	@$(MAKE) local-omni-infra-provider-libvirt-linux-arm64 DEST=$(ARTIFACTS)
+
+.PHONY: omni-infra-provider-libvirt-linux-arm64
+omni-infra-provider-libvirt-linux-arm64: $(ARTIFACTS)/omni-infra-provider-libvirt-linux-arm64  ## Builds executable for omni-infra-provider-libvirt-linux-arm64.
+
 .PHONY: omni-infra-provider-libvirt
-omni-infra-provider-libvirt: omni-infra-provider-libvirt-linux-amd64  ## Builds executables for omni-infra-provider-libvirt.
+omni-infra-provider-libvirt: omni-infra-provider-libvirt-darwin-amd64 omni-infra-provider-libvirt-darwin-arm64 omni-infra-provider-libvirt-linux-amd64 omni-infra-provider-libvirt-linux-arm64  ## Builds executables for omni-infra-provider-libvirt.
 
 .PHONY: lint-markdown
 lint-markdown:  ## Runs markdownlint.

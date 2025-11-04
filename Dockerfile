@@ -2,7 +2,7 @@
 
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-10-31T15:20:18Z by kres cd5a938.
+# Generated on 2025-11-04T12:33:37Z by kres cd5a938.
 
 ARG TOOLCHAIN
 
@@ -15,6 +15,7 @@ FROM docker.io/oven/bun:1.3.0-alpine AS lint-markdown
 WORKDIR /src
 RUN bun i markdownlint-cli@0.45.0 sentences-per-line@0.3.0
 COPY .markdownlint.json .
+COPY ./CHANGELOG.md ./CHANGELOG.md
 COPY ./README.md ./README.md
 RUN bunx markdownlint --ignore "CHANGELOG.md" --ignore "**/node_modules/**" --ignore '**/hack/chglog/**' --rules sentences-per-line .
 
@@ -135,21 +136,57 @@ COPY --from=lint-golangci-lint-fmt-run /src .
 FROM scratch AS unit-tests
 COPY --from=unit-tests-run /src/coverage.txt /coverage-unit-tests.txt
 
+# builds omni-infra-provider-libvirt-darwin-amd64
+FROM base AS omni-infra-provider-libvirt-darwin-amd64-build
+COPY --from=generate / /
+WORKDIR /src/cmd/omni-infra-provider-libvirt
+ARG GO_BUILDFLAGS
+ARG GO_LDFLAGS
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-libvirt/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-libvirt/go/pkg GOARCH=amd64 GOOS=darwin go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-libvirt-darwin-amd64
+
+# builds omni-infra-provider-libvirt-darwin-arm64
+FROM base AS omni-infra-provider-libvirt-darwin-arm64-build
+COPY --from=generate / /
+WORKDIR /src/cmd/omni-infra-provider-libvirt
+ARG GO_BUILDFLAGS
+ARG GO_LDFLAGS
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-libvirt/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-libvirt/go/pkg GOARCH=arm64 GOOS=darwin go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-libvirt-darwin-arm64
+
 # builds omni-infra-provider-libvirt-linux-amd64
 FROM base AS omni-infra-provider-libvirt-linux-amd64-build
 COPY --from=generate / /
 WORKDIR /src/cmd/omni-infra-provider-libvirt
 ARG GO_BUILDFLAGS
 ARG GO_LDFLAGS
-RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-libvirt/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-libvirt/go/pkg go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-libvirt-linux-amd64
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-libvirt/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-libvirt/go/pkg GOARCH=amd64 GOOS=linux go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-libvirt-linux-amd64
+
+# builds omni-infra-provider-libvirt-linux-arm64
+FROM base AS omni-infra-provider-libvirt-linux-arm64-build
+COPY --from=generate / /
+WORKDIR /src/cmd/omni-infra-provider-libvirt
+ARG GO_BUILDFLAGS
+ARG GO_LDFLAGS
+RUN --mount=type=cache,target=/root/.cache/go-build,id=omni-infra-provider-libvirt/root/.cache/go-build --mount=type=cache,target=/go/pkg,id=omni-infra-provider-libvirt/go/pkg GOARCH=arm64 GOOS=linux go build ${GO_BUILDFLAGS} -ldflags "${GO_LDFLAGS}" -o /omni-infra-provider-libvirt-linux-arm64
+
+FROM scratch AS omni-infra-provider-libvirt-darwin-amd64
+COPY --from=omni-infra-provider-libvirt-darwin-amd64-build /omni-infra-provider-libvirt-darwin-amd64 /omni-infra-provider-libvirt-darwin-amd64
+
+FROM scratch AS omni-infra-provider-libvirt-darwin-arm64
+COPY --from=omni-infra-provider-libvirt-darwin-arm64-build /omni-infra-provider-libvirt-darwin-arm64 /omni-infra-provider-libvirt-darwin-arm64
 
 FROM scratch AS omni-infra-provider-libvirt-linux-amd64
 COPY --from=omni-infra-provider-libvirt-linux-amd64-build /omni-infra-provider-libvirt-linux-amd64 /omni-infra-provider-libvirt-linux-amd64
 
+FROM scratch AS omni-infra-provider-libvirt-linux-arm64
+COPY --from=omni-infra-provider-libvirt-linux-arm64-build /omni-infra-provider-libvirt-linux-arm64 /omni-infra-provider-libvirt-linux-arm64
+
 FROM omni-infra-provider-libvirt-linux-${TARGETARCH} AS omni-infra-provider-libvirt
 
 FROM scratch AS omni-infra-provider-libvirt-all
+COPY --from=omni-infra-provider-libvirt-darwin-amd64 / /
+COPY --from=omni-infra-provider-libvirt-darwin-arm64 / /
 COPY --from=omni-infra-provider-libvirt-linux-amd64 / /
+COPY --from=omni-infra-provider-libvirt-linux-arm64 / /
 
 FROM scratch AS image-omni-infra-provider-libvirt
 ARG TARGETARCH
