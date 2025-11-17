@@ -21,3 +21,8 @@ spec:
   specs:
     - source: api/specs/specs.proto
       subdirectory: specs
+---
+kind: common.Repository
+spec:
+  enableConform: false
+
