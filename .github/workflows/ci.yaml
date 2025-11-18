@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-11-04T12:33:37Z by kres cd5a938.
+# Generated on 2025-11-18T12:30:24Z by kres e1d6dac.
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
@@ -210,10 +210,3 @@ jobs:
       - name: unit-tests-race
         run: |
           make unit-tests-race
-      - name: coverage
-        uses: codecov/codecov-action@v5
-        with:
-          files: _out/coverage-unit-tests.txt
-          flags: unit-tests
-          token: ${{ secrets.CODECOV_TOKEN }}
-        timeout-minutes: 3
