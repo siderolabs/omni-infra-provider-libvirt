@@ -1,11 +1,11 @@
 # commit to be tagged for the new release
 commit = "HEAD"
 
-project_name = ""
-github_repo = "/"
+project_name = "omni-infra-provider-libvirt"
+github_repo = "siderolabs/omni-infra-provider-libvirt"
 match_deps = "^github.com/(/[a-zA-Z0-9-]+)$"
 
-# previous = -
+previous = 'v0.1.0-alpha.0'
 # pre_release = true
 
 # [notes]
