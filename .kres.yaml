@@ -25,4 +25,8 @@ spec:
 kind: common.Repository
 spec:
   enableConform: false
+---
+kind: service.CodeCov
+spec:
+  enabled: false
 
