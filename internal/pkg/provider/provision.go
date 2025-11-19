@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -182,7 +183,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							"image",
 							pctx.State.TypedSpec().Value.SchematicId,
 							pctx.GetTalosVersion(),
-							"metal-amd64.qcow2.gz",
+							"metal-arm64.qcow2.gz",
 						)
 
 						reqCtx := context.WithoutCancel(ctx)
@@ -307,7 +308,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 				// https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainCreateXML
 				domData := libvirtxml.Domain{
-					Type: "kvm",
+					Type: "qemu",
 					Name: vmName,
 					// this one is really important, it has to match the UUID in omni
 					UUID: pctx.State.TypedSpec().Value.Uuid,
@@ -321,20 +322,27 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					},
 					OS: &libvirtxml.DomainOS{
 						Type: &libvirtxml.DomainOSType{
-							Arch:    "x86_64",
-							Machine: "q35",
+							Arch:    "aarch64",
+							Machine: "virt",
 							Type:    "hvm",
+						},
+						Loader: &libvirtxml.DomainLoader{
+							Readonly: "yes",
+							Type:     "pflash",
+							Path:     "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
 						},
 						BootDevices: []libvirtxml.DomainBootDevice{
 							{Dev: "hd"},
 						},
 					},
 					CPU: &libvirtxml.DomainCPU{
-						Mode: "host-passthrough",
+						Mode: "custom",
+						Model: &libvirtxml.DomainCPUModel{
+							Value: "cortex-a57",
+						},
 					},
 					Features: &libvirtxml.DomainFeatureList{
 						ACPI: &libvirtxml.DomainFeature{},
-						APIC: &libvirtxml.DomainFeatureAPIC{},
 					},
 					Devices: &libvirtxml.DomainDeviceList{
 						Channels: []libvirtxml.DomainChannel{
@@ -342,7 +350,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 								Source: &libvirtxml.DomainChardevSource{
 									UNIX: &libvirtxml.DomainChardevSourceUNIX{
 										Mode: "bind",
-										Path: "/var/lib/libvirt/qemu/channel/target/omni-node-001.org.qemu.guest_agent.0",
 									},
 								},
 								Target: &libvirtxml.DomainChannelTarget{
@@ -352,7 +359,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 								},
 							},
 						},
-						Emulator: "", // let libvirt pick qemu-system-x86_64
+						Emulator: "", // let libvirt pick qemu-system-aarch64
 						Disks: []libvirtxml.DomainDisk{
 							{
 								Device: "disk",
@@ -360,7 +367,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 									Name:  "qemu",
 									Type:  "qcow2",
 									Cache: "none",
-									IO:    "native",
 								},
 								Source: &libvirtxml.DomainDiskSource{
 									Volume: &libvirtxml.DomainDiskSourceVolume{
@@ -380,9 +386,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 									Type: "virtio",
 								},
 								Source: &libvirtxml.DomainInterfaceSource{
-									Network: &libvirtxml.DomainInterfaceSourceNetwork{
-										Network: data.Network,
-									},
+									User: &libvirtxml.DomainInterfaceSourceUser{},
 								},
 							},
 						},
@@ -413,7 +417,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						},
 						Graphics: []libvirtxml.DomainGraphic{
 							{
-								Spice: &libvirtxml.DomainGraphicSpice{
+								VNC: &libvirtxml.DomainGraphicVNC{
 									AutoPort: "yes",
 								},
 							},
@@ -426,7 +430,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return fmt.Errorf("error rendering domain XML: %w", err)
 				}
 
-				// log.Println(domXML)
+				log.Println(domXML)
 
 				if pctx.State.TypedSpec().Value.Uuid == "" {
 					pctx.State.TypedSpec().Value.Uuid = uuid.NewString()
