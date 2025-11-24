@@ -26,11 +26,13 @@ import (
 	"go.uber.org/zap"
 	"libvirt.org/go/libvirtxml"
 
+	"github.com/siderolabs/omni-infra-provider-libvirt/api/specs"
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider/resources"
 )
 
 const (
-	GiB = uint64(1024 * 1024 * 1024)
+	GiB             = uint64(1024 * 1024 * 1024)
+	diskFormatQcow2 = "qcow2"
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -74,7 +76,7 @@ func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, 
 	return vol, nil
 }
 
-func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uint64) (libvirt.StorageVol, error) {
+func createVolume(lc *libvirt.Libvirt, poolName, volumeName, format string, capacity uint64) (libvirt.StorageVol, error) {
 	if vol, err := getVol(lc, poolName, volumeName); err == nil {
 		return vol, nil
 	}
@@ -90,6 +92,7 @@ func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uin
 		Type: "file",
 		Name: volumeName,
 		Allocation: &libvirtxml.StorageVolumeSize{
+			// thin provision: allocate zero bytes at time of creation
 			Unit:  "bytes",
 			Value: 0,
 		},
@@ -99,7 +102,7 @@ func createVolume(lc *libvirt.Libvirt, poolName, volumeName string, capacity uin
 		},
 		Target: &libvirtxml.StorageVolumeTarget{
 			Format: &libvirtxml.StorageVolumeTargetFormat{
-				Type: "raw",
+				Type: format,
 			},
 		},
 	}
@@ -143,6 +146,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return provision.NewRetryInterval(time.Second * 1)
 			},
 		),
+
 		provision.NewStep(
 			"createSchematic",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -157,6 +161,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return nil
 			},
 		),
+
 		provision.NewStep(
 			"fetchDiskImage",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -224,8 +229,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return nil
 			},
 		),
+
 		provision.NewStep(
-			"provisionDisk",
+			"provisionPrimaryDisk",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 				var data Data
 
@@ -238,7 +244,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				volName := fmt.Sprintf("%s.qcow2", vmName)
 				pctx.State.TypedSpec().Value.PoolName = data.StoragePool
 
-				vol, err := createVolume(p.libvirtClient, data.StoragePool, volName, data.DiskSize)
+				vol, err := createVolume(p.libvirtClient, data.StoragePool, volName, diskFormatQcow2, data.DiskSize)
 				if err != nil {
 					return fmt.Errorf("error creating disk: %w", err)
 				}
@@ -283,6 +289,56 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return nil
 			},
 		),
+
+		provision.NewStep(
+			"provisionAdditionalDisks",
+			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+				var data Data
+
+				err := pctx.UnmarshalProviderData(&data)
+				if err != nil {
+					return err
+				}
+
+				if len(data.AdditionalDisks) > 0 {
+					var (
+						additionalDisks []*specs.AdditionalDisk
+						vmName          = pctx.GetRequestID()
+					)
+
+					for idx, additionalDiskSpec := range data.AdditionalDisks {
+						volName := fmt.Sprintf("%s-%d-%s.qcow2", vmName, idx, additionalDiskSpec.Type)
+						volSize := additionalDiskSpec.Size * GiB
+
+						_, err = createVolume(p.libvirtClient, data.StoragePool, volName, diskFormatQcow2, volSize)
+						if err != nil {
+							return fmt.Errorf("error creating disk: %w", err)
+						}
+
+						additionalDisks = append(
+							additionalDisks,
+							&specs.AdditionalDisk{
+								Type:    additionalDiskSpec.Type,
+								VolName: volName,
+							},
+						)
+					}
+
+					pctx.State.TypedSpec().Value.AdditionalDisks = additionalDisks
+				}
+
+				logger.Info("provisioned additional disks", zap.Int("count", len(data.AdditionalDisks)))
+
+				return nil
+			},
+		),
+
+		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+			patch := fmt.Sprintf("machine:\n  network:\n    hostname: %s", pctx.GetRequestID())
+
+			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(patch))
+		}),
+
 		provision.NewStep(
 			"createVM",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -303,6 +359,83 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				vol, err := getVol(p.libvirtClient, data.StoragePool, volName)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error fetching volume: %w", err)
+				}
+
+				disks := []libvirtxml.DomainDisk{
+					{
+						Device: "disk",
+						Driver: &libvirtxml.DomainDiskDriver{
+							Name:  "qemu",
+							Type:  "qcow2",
+							Cache: "none",
+							IO:    "native",
+						},
+						Source: &libvirtxml.DomainDiskSource{
+							Volume: &libvirtxml.DomainDiskSourceVolume{
+								Pool:   vol.Pool,
+								Volume: vol.Name,
+							},
+						},
+						Target: &libvirtxml.DomainDiskTarget{
+							Dev: "vda",
+							Bus: "virtio",
+						},
+					},
+				}
+
+				var (
+					sataDiskCount = 1 // account for root disk
+					nvmeDiskCount = 0
+				)
+
+				for _, additionalDisk := range pctx.State.TypedSpec().Value.AdditionalDisks {
+					var dev, bus string
+
+					switch additionalDisk.Type {
+					case "nvme":
+						{
+							dev = fmt.Sprintf("nvme%dn1", nvmeDiskCount)
+							bus = "nvme"
+							nvmeDiskCount++
+						}
+					case "sata":
+						{
+							idx := sataDiskCount
+
+							s := ""
+							for idx >= 0 {
+								s = fmt.Sprint(rune('a'+(idx%26))) + s
+								idx = idx/26 - 1
+							}
+
+							dev = fmt.Sprintf("sd%s", s)
+							bus = "virtio"
+							sataDiskCount++
+						}
+					}
+
+					additionalDisk := libvirtxml.DomainDisk{
+						Device: "disk",
+						Driver: &libvirtxml.DomainDiskDriver{
+							Name:  "qemu",
+							Type:  "qcow2",
+							Cache: "none",
+							IO:    "native",
+						},
+						Source: &libvirtxml.DomainDiskSource{
+							Volume: &libvirtxml.DomainDiskSourceVolume{
+								Pool:   data.StoragePool,
+								Volume: additionalDisk.VolName,
+							},
+						},
+						Target: &libvirtxml.DomainDiskTarget{
+							Dev: dev,
+							Bus: bus,
+						},
+						Serial: pctx.State.TypedSpec().Value.Uuid,
+					}
+
+					disks = append(disks, additionalDisk)
 				}
 
 				// https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainCreateXML
@@ -353,27 +486,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							},
 						},
 						Emulator: "", // let libvirt pick qemu-system-x86_64
-						Disks: []libvirtxml.DomainDisk{
-							{
-								Device: "disk",
-								Driver: &libvirtxml.DomainDiskDriver{
-									Name:  "qemu",
-									Type:  "qcow2",
-									Cache: "none",
-									IO:    "native",
-								},
-								Source: &libvirtxml.DomainDiskSource{
-									Volume: &libvirtxml.DomainDiskSourceVolume{
-										Pool:   vol.Pool,
-										Volume: vol.Name,
-									},
-								},
-								Target: &libvirtxml.DomainDiskTarget{
-									Dev: "vda",
-									Bus: "virtio",
-								},
-							},
-						},
+						Disks:    disks,
 						Interfaces: []libvirtxml.DomainInterface{
 							{
 								Model: &libvirtxml.DomainInterfaceModel{
@@ -436,7 +549,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				// create domain
 				_, err = p.libvirtClient.DomainDefineXML(domXML)
 				if err != nil {
-					return fmt.Errorf("error creating domain: %w", err)
+					return fmt.Errorf("creating domain: %w", err)
 				}
 
 				// set VM id in omni
@@ -445,6 +558,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				return nil
 			},
 		),
+
 		provision.NewStep(
 			"startVM",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
@@ -490,28 +604,44 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 		if strings.Contains(err.Error(), "Domain not found") {
 			logger.Info("domain was alredy removed: " + vmName)
 		} else {
-			return fmt.Errorf("error fetching domain: %w", err)
+			return fmt.Errorf("fetching domain: %w", err)
 		}
 	} else {
 		logger.Info("found domain " + vmName)
 
-		err = p.libvirtClient.DomainDestroy(dom)
+		state, _, err := p.libvirtClient.DomainGetState(dom, 0) //nolint:govet
 		if err != nil {
-			return fmt.Errorf("error shutting down domain: %w", err)
+			return fmt.Errorf("fetching domain state: %w", err)
 		}
 
-		logger.Info("destroyed domain " + vmName)
+		switch state {
+		case int32(libvirt.DomainRunning):
+			{
+				// in libvirt, "destroy" translates to "shut down" or "power off"
+				err = p.libvirtClient.DomainDestroy(dom)
+				if err != nil {
+					return fmt.Errorf("destroy domain: %w", err)
+				}
 
-		err = p.libvirtClient.DomainUndefine(dom)
-		if err != nil {
-			return fmt.Errorf("error undefining VM: %w", err)
+				logger.Info("destroyed domain " + vmName)
+
+				return provision.NewRetryInterval(time.Second * 3)
+			}
+		case int32(libvirt.DomainShutdown):
+			return provision.NewRetryInterval(time.Second * 10)
+		case int32(libvirt.DomainShutoff):
+			{
+				// in libvirt, "undefine" translates to "delete a VM"
+				err = p.libvirtClient.DomainUndefine(dom)
+				if err != nil {
+					return fmt.Errorf("undefine VM: %w", err)
+				}
+
+				logger.Info("undefined domain " + vmName)
+			}
+		default:
+			return provision.NewRetryErrorf(time.Second*10, "unknown VM state: %v", state)
 		}
-
-		logger.Info("undefined domain " + vmName)
-	}
-
-	if machine == nil {
-		return provision.NewRetryError(errors.New("machine == nil"), time.Second*10)
 	}
 
 	poolName := machine.TypedSpec().Value.PoolName
@@ -528,16 +658,34 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 		}
 
 		logger.Info("volume was removed already: " + volName)
+	} else {
+		err = p.libvirtClient.StorageVolDelete(vol, 0)
+		if err != nil {
+			return fmt.Errorf("error deleting volume: %w", err)
+		}
 
-		return nil
+		logger.Info("removed volume: " + volName)
 	}
 
-	err = p.libvirtClient.StorageVolDelete(vol, 0)
-	if err != nil {
-		return fmt.Errorf("error deleting volume: %w", err)
-	}
+	for _, additionalDisk := range machine.TypedSpec().Value.AdditionalDisks {
+		additionalVolume, err := getVol(p.libvirtClient, poolName, additionalDisk.VolName)
+		if err != nil {
+			if !errors.Is(err, errVolNoExist) {
+				return fmt.Errorf("fetching volume %s: %w", additionalDisk.VolName, err)
+			}
 
-	logger.Info("removed volume: " + volName)
+			logger.Info("volume was removed already: " + additionalDisk.VolName)
+
+			continue
+		}
+
+		err = p.libvirtClient.StorageVolDelete(additionalVolume, 0)
+		if err != nil {
+			return fmt.Errorf("error deleting volume: %w", err)
+		}
+
+		logger.Info("removed volume: " + additionalDisk.VolName)
+	}
 
 	return nil
 }

@@ -3,25 +3,57 @@
   "properties": {
     "cores": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "default": 2
     },
     "memory": {
       "type": "integer",
       "minimum": 2048,
+      "default": 4096,
       "description": "In MiB"
     },
     "disk_size": {
       "type": "integer",
       "minimum": 10,
+      "default": 20,
       "description": "In GiB"
     },
     "storage_pool": {
       "type": "string",
+      "default": "default",
       "description": "libvirt storage pool name"
     },
     "network": {
       "type": "string",
+      "default": "default",
       "description": "libvirt network name"
+    },
+    "additional_disks": {
+      "type": "array",
+      "description": "YAML format, list of {type: string, size: uint64}. type is either sata or nvme, size is GiB.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "default": "nvme",
+            "enum": [
+              "sata",
+              "nvme"
+            ]
+          },
+          "size": {
+            "type": "integer",
+            "format": "uint64",
+            "minimum": 10,
+            "default": 20
+          }
+        },
+        "required": [
+          "type",
+          "size"
+        ]
+      }
     }
   },
   "required": [

@@ -3,12 +3,18 @@ package emuspecs;
 
 option go_package = "github.com/siderolabs/omni-infra-provider-libvirt/api/specs";
 
+message AdditionalDisk {
+  string type = 1;
+  string volName = 3;
+}
+
 // MachineSpec is stored in Omni in the infra provisioner state.
 message MachineSpec {
   string uuid = 1; // required?
   string schematic_id = 2;
   string talos_version = 3;
   string vm_vol_name = 10;
+  repeated AdditionalDisk additional_disks = 11;
   string pool_name = 20;
   string vm_name = 21;
 }

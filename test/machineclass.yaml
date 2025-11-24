@@ -9,5 +9,22 @@ spec:
       cores: 2
       memory: 4096 # in MB
       disk_size: 20 # in GB
-      storage_pool: "vmstorage"
+      storage_pool: "default"
       network: "default"
+---
+metadata:
+  namespace: default
+  type: MachineClasses.omni.sidero.dev
+  id: libvirt-medium
+spec:
+  autoprovision:
+    providerid: libvirt
+    providerdata: |
+      cores: 4
+      memory: 8192 # in MB
+      disk_size: 20 # in GB
+      storage_pool: "default"
+      network: "default"
+      additional_disks:
+        - type: "nvme"
+          size: 500

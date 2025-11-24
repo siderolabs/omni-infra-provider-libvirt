@@ -35,6 +35,10 @@ libvirt:
 
 ## Running the provider
 
+> **_NOTE:_**
+> `omni-infra-provider-libvirt` will not create storage pools nor networks.
+> It will optimistically assume that they already exist and are functional.
+
 ### Using Docker
 
 Copy the provider credentials created in omni to an `.env` file
@@ -51,8 +55,7 @@ Example for using the above `ssh` based connection method:
 ```shell
 docker run \
   --name omni-infra-provider-libvirt \
-  --rm \
-  -it \
+  --rm -it \
   -e USER=$USER \
   --env-file /tmp/omni-provider-libvirt.env \
   -v /tmp/omni-provider-libvirt.yaml:/config.yaml \
@@ -70,8 +73,7 @@ Example for using the above `socket` based connection method:
 ```shell
 docker run \
   --name omni-infra-provider-libvirt \
-  --rm \
-  -it \
+  --rm -it \
   -e USER=$USER \
   --env-file /tmp/omni-provider-libvirt.env \
   -v /tmp/omni-provider-libvirt.yaml:/config.yaml \
@@ -80,7 +82,7 @@ docker run \
     --config-file /config.yaml
 ```
 
-## How to use in an Omni cluster templates
+## How to use in an Omni cluster template
 
 See [test/](./test/) for some examples
 
@@ -99,4 +101,10 @@ Build the binary:
 ```shell
 # e.g. for darwin
 make omni-infra-provider-libvirt-darwin-arm64
+```
+
+Run the linter:
+
+```shell
+make lint-fmt fmt
 ```
