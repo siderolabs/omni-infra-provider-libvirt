@@ -356,6 +356,8 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 
 				vmName := pctx.GetRequestID()
 
+				// assemble primary disk volume
+
 				vol, err := getVol(p.libvirtClient, data.StoragePool, volName)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error fetching volume: %w", err)
@@ -382,6 +384,8 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						},
 					},
 				}
+
+				// assemble additional disk volumes
 
 				var (
 					sataDiskCount = 1 // account for root disk
@@ -412,6 +416,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							bus = "virtio"
 							sataDiskCount++
 						}
+					default:
+						{
+							return fmt.Errorf("unknown disk type: %q", additionalDisk.Type)
+						}
 					}
 
 					additionalDisk := libvirtxml.DomainDisk{
@@ -432,12 +440,32 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							Dev: dev,
 							Bus: bus,
 						},
-						Serial: pctx.State.TypedSpec().Value.Uuid,
+						Serial: uuid.NewString(),
 					}
 
 					disks = append(disks, additionalDisk)
 				}
 
+				// assemble network interfaces
+
+				var networkInterfaces []libvirtxml.DomainInterface
+
+				for _, ifaceData := range data.NetworkInterfaces {
+					iface := libvirtxml.DomainInterface{
+						Model: &libvirtxml.DomainInterfaceModel{
+							Type: ifaceData.Driver,
+						},
+						Source: &libvirtxml.DomainInterfaceSource{
+							Network: &libvirtxml.DomainInterfaceSourceNetwork{
+								Network: ifaceData.NetworkName,
+							},
+						},
+					}
+
+					networkInterfaces = append(networkInterfaces, iface)
+				}
+
+				// generate libvirt XML spec
 				// https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainCreateXML
 				domData := libvirtxml.Domain{
 					Type: "kvm",
@@ -485,20 +513,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 								},
 							},
 						},
-						Emulator: "", // let libvirt pick qemu-system-x86_64
-						Disks:    disks,
-						Interfaces: []libvirtxml.DomainInterface{
-							{
-								Model: &libvirtxml.DomainInterfaceModel{
-									Type: "virtio",
-								},
-								Source: &libvirtxml.DomainInterfaceSource{
-									Network: &libvirtxml.DomainInterfaceSourceNetwork{
-										Network: data.Network,
-									},
-								},
-							},
-						},
+						Emulator:   "", // let libvirt pick qemu-system-x86_64
+						Disks:      disks,
+						Interfaces: networkInterfaces,
 						MemBalloon: &libvirtxml.DomainMemBalloon{
 							Model: "virtio",
 						},
@@ -539,12 +556,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return fmt.Errorf("error rendering domain XML: %w", err)
 				}
 
-				// log.Println(domXML)
-
-				if pctx.State.TypedSpec().Value.Uuid == "" {
-					pctx.State.TypedSpec().Value.Uuid = uuid.NewString()
-					pctx.SetMachineUUID(pctx.State.TypedSpec().Value.Uuid)
-				}
+				logger.Debug("domain XML", zap.String("xml_data", domXML))
 
 				// create domain
 				_, err = p.libvirtClient.DomainDefineXML(domXML)

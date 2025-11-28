@@ -6,15 +6,20 @@ package provider
 
 // Data is the provider custom machine config.
 type Data struct {
-	StoragePool     string           `yaml:"storage_pool"`
-	Network         string           `yaml:"network"`
-	AdditionalDisks []additionalDisk `yaml:"additional_disks,omitempty"`
-	DiskSize        uint64           `yaml:"disk_size"`
-	Cores           uint             `yaml:"cores"`
-	Memory          uint             `yaml:"memory"`
+	StoragePool       string             `yaml:"storage_pool"`
+	NetworkInterfaces []networkInterface `yaml:"network_interfaces,omitempty"`
+	AdditionalDisks   []additionalDisk   `yaml:"additional_disks,omitempty"`
+	DiskSize          uint64             `yaml:"disk_size"`
+	Cores             uint               `yaml:"cores"`
+	Memory            uint               `yaml:"memory"`
 }
 
 type additionalDisk struct {
 	Type string `yaml:"type"`
 	Size uint64 `yaml:"size"` // GiB
+}
+
+type networkInterface struct {
+	Driver      string `yaml:"driver"`
+	NetworkName string `yaml:"network_name"`
 }

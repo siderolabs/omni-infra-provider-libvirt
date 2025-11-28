@@ -10,27 +10,22 @@
       "type": "integer",
       "minimum": 2048,
       "default": 4096,
-      "description": "In MiB"
+      "description": "Memory size MiB"
     },
     "disk_size": {
       "type": "integer",
       "minimum": 10,
       "default": 20,
-      "description": "In GiB"
+      "description": "Disk size in GiB"
     },
     "storage_pool": {
       "type": "string",
       "default": "default",
       "description": "libvirt storage pool name"
     },
-    "network": {
-      "type": "string",
-      "default": "default",
-      "description": "libvirt network name"
-    },
     "additional_disks": {
       "type": "array",
-      "description": "YAML format, list of {type: string, size: uint64}. type is either sata or nvme, size is GiB.",
+      "description": "List of secondary disks.",
       "items": {
         "type": "object",
         "properties": {
@@ -46,12 +41,50 @@
             "type": "integer",
             "format": "uint64",
             "minimum": 10,
-            "default": 20
+            "default": 20,
+            "description": "Disk size in GiB"
           }
         },
         "required": [
           "type",
           "size"
+        ]
+      }
+    },
+    "network_interfaces": {
+      "type": "array",
+      "description": "List of network interfaces.",
+      "default": [
+        {
+          "driver": "virtio",
+          "network_name": "default",
+          "physical_address": ""
+        }
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "driver": {
+            "type": "string",
+            "enum": [
+              "virtio",
+              "e1000e"
+            ],
+            "default": "virtio"
+          },
+          "physical_address": {
+            "type": "string",
+            "description": "MAC address. If empty or omitted, libvirt will assign one."
+          },
+          "network_name": {
+            "type": "string",
+            "description": "libvirt network name. Must exist, the provider will not create it.",
+            "default": "default"
+          }
+        },
+        "required": [
+          "driver",
+          "network_name"
         ]
       }
     }
@@ -60,7 +93,6 @@
     "cores",
     "memory",
     "disk_size",
-    "storage_pool",
-    "network"
+    "storage_pool"
   ]
 }

@@ -10,7 +10,9 @@ spec:
       memory: 4096 # in MB
       disk_size: 20 # in GB
       storage_pool: "default"
-      network: "default"
+      network_interfaces:
+        - driver: "virtio"
+          network_name: "default"
 ---
 metadata:
   namespace: default
@@ -24,7 +26,11 @@ spec:
       memory: 8192 # in MB
       disk_size: 20 # in GB
       storage_pool: "default"
-      network: "default"
+      network_interfaces:
+        - driver: virtio
+          network_name: "default"
+        - driver: virtio
+          network_name: "talos-secondary"
       additional_disks:
         - type: "nvme"
           size: 500
