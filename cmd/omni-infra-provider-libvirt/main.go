@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/sync/errgroup"
 	"gopkg.in/yaml.v3"
 
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/config"
@@ -96,7 +97,15 @@ var rootCmd = &cobra.Command{
 			logger.Info(fmt.Sprintf("libvirtVersion: %d", ver))
 		}
 
-		provisioner := provider.NewProvisioner(libvirtClient)
+		// Ensure cache directory exists
+		err = os.MkdirAll(cfg.imageCachePath, 0o755)
+		if err != nil {
+			return fmt.Errorf("failed to create cache directory: %w", err)
+		}
+
+		imageCache := provider.NewImageCache(logger, cfg.imageCachePath)
+
+		provisioner := provider.NewProvisioner(libvirtClient, imageCache)
 
 		ip, err := infra.NewProvider(meta.ProviderID, provisioner, infra.ProviderConfig{
 			Name:        cfg.providerName,
@@ -118,9 +127,24 @@ var rootCmd = &cobra.Command{
 			clientOptions = append(clientOptions, client.WithServiceAccount(cfg.serviceAccountKey))
 		}
 
-		return ip.Run(cmd.Context(), logger, infra.WithOmniEndpoint(cfg.omniAPIEndpoint), infra.WithClientOptions(
-			clientOptions...,
-		), infra.WithConcurrency(5))
+		// as we run to concurrent goroutines here that can fail each in their own way,
+		// we use an errGroup to account for that.
+		// see errgroup.Group.Go() for further details.
+
+		eg, ctx := errgroup.WithContext(cmd.Context())
+
+		eg.Go(func() error {
+			return imageCache.Run(ctx)
+		})
+
+		eg.Go(func() error {
+			return ip.Run(ctx, logger, infra.WithOmniEndpoint(cfg.omniAPIEndpoint), infra.WithClientOptions(
+				clientOptions...,
+			), infra.WithConcurrency(5))
+		})
+
+		// this blocks until all goroutines are done
+		return eg.Wait()
 	},
 }
 
@@ -130,6 +154,7 @@ var cfg struct {
 	providerName        string
 	providerDescription string
 	configFile          string
+	imageCachePath      string
 	insecureSkipVerify  bool
 }
 
@@ -155,4 +180,5 @@ func init() {
 	rootCmd.Flags().StringVar(&cfg.providerDescription, "provider-description", "libVirt infrastructure provider", "Provider description as it appears in Omni")
 	rootCmd.Flags().BoolVar(&cfg.insecureSkipVerify, "insecure-skip-verify", false, "ignores untrusted certs on Omni side")
 	rootCmd.Flags().StringVar(&cfg.configFile, "config-file", "", "libvirt provider config")
+	rootCmd.Flags().StringVar(&cfg.imageCachePath, "image-cache-path", provider.DefaultCachePath, "the path to write cached images to")
 }
