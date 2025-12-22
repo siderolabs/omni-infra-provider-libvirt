@@ -10,17 +10,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/digitalocean/go-libvirt"
 	"github.com/google/uuid"
-	"github.com/siderolabs/omni/client/pkg/constants"
 	"github.com/siderolabs/omni/client/pkg/infra/provision"
 	"github.com/siderolabs/omni/client/pkg/omni/resources/infra"
 	"go.uber.org/zap"
@@ -38,21 +33,21 @@ const (
 // Provisioner implements Talos emulator infra provider.
 type Provisioner struct {
 	libvirtClient *libvirt.Libvirt
+	imageCache    *ImageCache
 }
 
 // NewProvisioner creates a new provisioner.
-func NewProvisioner(libvirtClient *libvirt.Libvirt) *Provisioner {
+func NewProvisioner(libvirtClient *libvirt.Libvirt, imageCache *ImageCache) *Provisioner {
 	return &Provisioner{
 		libvirtClient: libvirtClient,
+		imageCache:    imageCache,
 	}
 }
 
 var (
-	timeout          = time.Second * 120
-	errDownloadImage = errors.New("error downloading image")
-	errCreateVol     = errors.New("error creating volume")
-	errUploadImage   = errors.New("error uploading image")
-	errVolNoExist    = errors.New("volume does not exist")
+	errCreateVol   = errors.New("error creating volume")
+	errUploadImage = errors.New("error uploading image")
+	errVolNoExist  = errors.New("volume does not exist")
 )
 
 func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, error) {
@@ -163,80 +158,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		),
 
 		provision.NewStep(
-			"fetchDiskImage",
-			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-				var data Data
-				if err := pctx.UnmarshalProviderData(&data); err != nil {
-					return err
-				}
-
-				outDir := "/tmp"
-				fileName := fmt.Sprintf("%s.qcow2.gz", pctx.State.TypedSpec().Value.SchematicId)
-				filePath := path.Join(outDir, fileName)
-
-				_, err := os.Stat(filePath)
-				if err != nil {
-					if errors.Is(err, os.ErrNotExist) {
-						// image does not exist, so fetch it
-						imageURL, err := url.Parse(constants.ImageFactoryBaseURL)
-						if err != nil {
-							return err
-						}
-
-						imageURL = imageURL.JoinPath(
-							"image",
-							pctx.State.TypedSpec().Value.SchematicId,
-							pctx.GetTalosVersion(),
-							"metal-amd64.qcow2.gz",
-						)
-
-						logger.Info(
-							"generated image url",
-							zap.String("schematic_id", pctx.State.TypedSpec().Value.SchematicId),
-							zap.String("talos_version", pctx.GetTalosVersion()),
-						)
-
-						reqCtx := context.WithoutCancel(ctx)
-
-						req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, imageURL.String(), nil)
-						if err != nil {
-							return fmt.Errorf("error creating request: %w", err)
-						}
-
-						client := http.Client{
-							CheckRedirect: func(req *http.Request, via []*http.Request) error {
-								return nil // follow all redirects
-							},
-							Timeout: timeout,
-						}
-
-						res, err := client.Do(req)
-						if err != nil {
-							return provision.NewRetryErrorf(time.Second*10, "error fetching image: %w", err)
-						}
-						//nolint:errcheck
-						defer res.Body.Close()
-
-						imageData, err := io.ReadAll(res.Body)
-						if err != nil {
-							return provision.NewRetryErrorf(time.Second*10, "%w: error reading response body: %w", errDownloadImage, err)
-						}
-
-						err = os.WriteFile(filePath, imageData, 0o740)
-						if err != nil {
-							return fmt.Errorf("error writing image to disk: %w", err)
-						}
-					} else {
-						// already exists
-						return nil
-					}
-				}
-
-				return nil
-			},
-		),
-
-		provision.NewStep(
 			"provisionPrimaryDisk",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 				var data Data
@@ -245,6 +166,16 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				if err != nil {
 					return err
 				}
+
+				schematicID := pctx.State.TypedSpec().Value.SchematicId
+				talosVersion := pctx.GetTalosVersion()
+
+				// Acquire image from cache (downloads if needed, deduplicates concurrent requests)
+				filePath, err := p.imageCache.Acquire(ctx, schematicID, talosVersion)
+				if err != nil {
+					return provision.NewRetryErrorf(time.Second*10, "error fetching image: %w", err)
+				}
+				defer p.imageCache.Release(schematicID, talosVersion)
 
 				vmName := pctx.GetRequestID()
 				volName := fmt.Sprintf("%s.qcow2", vmName)
@@ -255,19 +186,17 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return fmt.Errorf("error creating disk: %w", err)
 				}
 
-				outDir := "/tmp"
-				fileName := fmt.Sprintf("%s.qcow2.gz", pctx.State.TypedSpec().Value.SchematicId)
-				filePath := path.Join(outDir, fileName)
-
 				fh, err := os.Open(filePath)
 				if err != nil {
 					return fmt.Errorf("error opening local disk image: %w", err)
 				}
+				defer fh.Close() //nolint:errcheck
 
 				r, err := gzip.NewReader(fh)
 				if err != nil {
 					return fmt.Errorf("error opening gzip image reader: %w", err)
 				}
+				defer r.Close() //nolint:errcheck
 
 				err = p.libvirtClient.StorageVolUpload(vol, r, 0, 0, 0)
 				if err != nil {
@@ -282,15 +211,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				}
 
 				pctx.State.TypedSpec().Value.VmVolName = volName
-
-				// TODO: we could try to be clever here and cache files
-				err = os.Remove(fileName)
-				if err != nil {
-					if !errors.Is(err, os.ErrNotExist) {
-						return fmt.Errorf("error deleting %s: %w", fileName, err)
-					}
-					// if it is not there, it is okay if it couldn't be deleted.
-				}
 
 				return nil
 			},
