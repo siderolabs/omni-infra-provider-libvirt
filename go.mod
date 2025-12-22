@@ -14,6 +14,7 @@ require (
 	github.com/siderolabs/omni/client v1.4.0
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.27.1
+	golang.org/x/sync v0.19.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.3
 	libvirt.org/go/libvirtxml v1.11010.0
@@ -62,7 +63,6 @@ require (
 	github.com/foxboron/go-uefi v0.0.0-20251010190908-d29549a44f29 // indirect
 	github.com/gertd/go-pluralize v0.2.1 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.0 // indirect
-	github.com/google/btree v1.1.3 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.20.7 // indirect
@@ -115,7 +115,6 @@ require (
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
-	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
