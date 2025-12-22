@@ -190,6 +190,12 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							"metal-amd64.qcow2.gz",
 						)
 
+						logger.Info(
+							"generated image url",
+							zap.String("schematic_id", pctx.State.TypedSpec().Value.SchematicId),
+							zap.String("talos_version", pctx.GetTalosVersion()),
+						)
+
 						reqCtx := context.WithoutCancel(ctx)
 
 						req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, imageURL.String(), nil)

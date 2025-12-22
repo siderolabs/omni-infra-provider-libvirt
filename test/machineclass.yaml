@@ -30,7 +30,28 @@ spec:
         - driver: virtio
           network_name: "default"
         - driver: virtio
-          network_name: "talos-secondary"
+          network_name: "talos-isolated"
       additional_disks:
         - type: "nvme"
-          size: 500
+          size: 100 # in GB
+---
+metadata:
+  namespace: default
+  type: MachineClasses.omni.sidero.dev
+  id: libvirt-large
+spec:
+  autoprovision:
+    providerid: libvirt
+    providerdata: |
+      cores: 8
+      memory: 32000 # in MB
+      disk_size: 20 # in GB
+      storage_pool: "vmstorage"
+      network_interfaces:
+        - driver: virtio
+          network_name: "default"
+        - driver: virtio
+          network_name: "talos-isolated"
+      additional_disks:
+        - type: "nvme"
+          size: 500 # in GB
