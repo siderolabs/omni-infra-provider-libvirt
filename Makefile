@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2025-12-21T09:25:25Z by kres 26be706.
+# Generated on 2026-01-06T14:27:37Z by kres 8a4aebf.
 
 # common variables
 
@@ -46,6 +46,7 @@ PLATFORM ?= linux/amd64
 PROGRESS ?= auto
 PUSH ?= false
 CI_ARGS ?=
+WITH_BUILD_DEBUG ?=
 BUILDKIT_MULTI_PLATFORM ?=
 COMMON_ARGS = --file=Dockerfile
 COMMON_ARGS += --provenance=false
@@ -126,6 +127,10 @@ The registry and username can be overridden by exporting REGISTRY, and USERNAME
 respectively.
 
 endef
+
+ifneq (, $(filter $(WITH_BUILD_DEBUG), t true TRUE y yes 1))
+BUILD := BUILDX_EXPERIMENTAL=1 docker buildx debug --invoke /bin/sh --on error build
+endif
 
 ifneq (, $(filter $(WITH_RACE), t true TRUE y yes 1))
 GO_BUILDFLAGS += -race

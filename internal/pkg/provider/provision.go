@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/digitalocean/go-libvirt"
 	"github.com/google/uuid"
 	"github.com/siderolabs/omni/client/pkg/infra/provision"
@@ -259,11 +260,21 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			},
 		),
 
-		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			patch := fmt.Sprintf("machine:\n  network:\n    hostname: %s", pctx.GetRequestID())
+		provision.NewStep(
+			"configureHostname",
+			func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+				talosVersion := semver.MustParse(pctx.GetTalosVersion())
+				patch := fmt.Sprintf("machine:\n  network:\n    hostname: %s", pctx.GetRequestID())
 
-			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(patch))
-		}),
+				// in talos v1.12+ hostname is set via HostnameConfig object
+				// https://docs.siderolabs.com/talos/v1.12/reference/configuration/network/hostnameconfig
+				if talosVersion.Major == 1 && talosVersion.Minor >= 12 {
+					patch = fmt.Sprintf("apiVersion: v1alpha1\nkind: HostnameConfig\nauto: off\nhostname: %s", pctx.GetRequestID())
+				}
+
+				return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(patch))
+			},
+		),
 
 		provision.NewStep(
 			"createVM",
