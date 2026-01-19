@@ -224,12 +224,14 @@ func (c *ImageCache) download(ctx context.Context, key, schematicID, talosVersio
 		return fmt.Errorf("failed to parse image factory URL: %w", err)
 	}
 
-	imageURL = imageURL.JoinPath(
-		"image",
-		schematicID,
-		talosVersion,
-		"metal-amd64.qcow2.gz",
+	const (
+		arch     = "amd64"
+		format   = "qcow2.gz"
+		platform = "nocloud"
 	)
+
+	imagePath := fmt.Sprintf("%s-%s.%s", platform, arch, format)
+	imageURL = imageURL.JoinPath("image", schematicID, talosVersion, imagePath)
 
 	c.logger.Info("downloading image",
 		zap.String("schematic_id", schematicID),

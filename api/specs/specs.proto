@@ -21,6 +21,7 @@ message MachineSpec {
   string vm_vol_name = 10;
   repeated AdditionalDisk additional_disks = 11;
   repeated NetworkInterfaces network_interfaces = 12;
+  string cidata_vol_name = 13;
   string pool_name = 20;
   string vm_name = 21;
 }

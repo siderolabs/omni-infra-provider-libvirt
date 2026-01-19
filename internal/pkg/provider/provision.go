@@ -6,6 +6,7 @@
 package provider
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -17,17 +18,19 @@ import (
 	"github.com/digitalocean/go-libvirt"
 	"github.com/google/uuid"
 	"github.com/siderolabs/omni/client/pkg/infra/provision"
-	"github.com/siderolabs/omni/client/pkg/omni/resources/infra"
 	"go.uber.org/zap"
 	"libvirt.org/go/libvirtxml"
 
 	"github.com/siderolabs/omni-infra-provider-libvirt/api/specs"
+	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider/cidata"
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider/resources"
 )
 
 const (
-	GiB             = uint64(1024 * 1024 * 1024)
+	MiB             = uint64(1024 * 1024)
+	GiB             = MiB * 1024
 	diskFormatQcow2 = "qcow2"
+	diskFormatRaw   = "raw"
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -44,76 +47,7 @@ func NewProvisioner(libvirtClient *libvirt.Libvirt, imageCache *ImageCache) *Pro
 	}
 }
 
-var (
-	errCreateVol   = errors.New("error creating volume")
-	errUploadImage = errors.New("error uploading image")
-	errVolNoExist  = errors.New("volume does not exist")
-)
-
-func getVol(lc *libvirt.Libvirt, poolName, volName string) (libvirt.StorageVol, error) {
-	var vol libvirt.StorageVol
-
-	pool, err := lc.StoragePoolLookupByName(poolName)
-	if err != nil {
-		return vol, fmt.Errorf("getvol: %w", err)
-	}
-
-	vol, err = lc.StorageVolLookupByName(pool, volName)
-	if err != nil {
-		// TODO: there is probably a better way to check this
-		if strings.Contains(err.Error(), "Storage volume not found") {
-			return vol, errVolNoExist
-		}
-
-		return vol, err
-	}
-
-	return vol, nil
-}
-
-func createVolume(lc *libvirt.Libvirt, poolName, volumeName, format string, capacity uint64) (libvirt.StorageVol, error) {
-	if vol, err := getVol(lc, poolName, volumeName); err == nil {
-		return vol, nil
-	}
-
-	var vol libvirt.StorageVol
-
-	pool, err := lc.StoragePoolLookupByName(poolName)
-	if err != nil {
-		return vol, fmt.Errorf("%w: %w", errCreateVol, err)
-	}
-
-	volData := libvirtxml.StorageVolume{
-		Type: "file",
-		Name: volumeName,
-		Allocation: &libvirtxml.StorageVolumeSize{
-			// thin provision: allocate zero bytes at time of creation
-			Unit:  "bytes",
-			Value: 0,
-		},
-		Capacity: &libvirtxml.StorageVolumeSize{
-			Unit:  "bytes",
-			Value: capacity,
-		},
-		Target: &libvirtxml.StorageVolumeTarget{
-			Format: &libvirtxml.StorageVolumeTargetFormat{
-				Type: format,
-			},
-		},
-	}
-
-	volXML, err := volData.Marshal()
-	if err != nil {
-		return vol, fmt.Errorf("%w, error rendering XML: %w", errCreateVol, err)
-	}
-
-	vol, err = lc.StorageVolCreateXML(pool, volXML, 0)
-	if err != nil {
-		return vol, fmt.Errorf("%w: error creating volume: %w", errCreateVol, err)
-	}
-
-	return vol, nil
-}
+var errUploadImage = errors.New("error uploading image")
 
 // ProvisionSteps implements infra.Provisioner.
 //
@@ -259,11 +193,63 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			},
 		),
 
-		provision.NewStep("configureHostname", func(ctx context.Context, _ *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-			patch := fmt.Sprintf("machine:\n  network:\n    hostname: %s", pctx.GetRequestID())
+		provision.NewStep(
+			"provisionCidata",
+			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
+				// create CIDATA for nocloud, contains the hostname
+				// docs: https://docs.siderolabs.com/talos/latest/platform-specific-installations/cloud-platforms/nocloud#cdrom%2Fusb
+				var data Data
 
-			return pctx.CreateConfigPatch(ctx, "000-hostname-%s"+pctx.GetRequestID(), []byte(patch))
-		}),
+				err := pctx.UnmarshalProviderData(&data)
+				if err != nil {
+					return err
+				}
+
+				var (
+					vmName  = pctx.GetRequestID()
+					volName = fmt.Sprintf("%s-cidata.iso", vmName)
+
+					metadata    = bytes.NewReader(cidata.MetaData(vmName))
+					userdata    = bytes.NewReader([]byte("#cloud-config\n")) // empty
+					networkdata = bytes.NewReader(cidata.NetworkData())      // TODO: allow to be passed by user?
+				)
+
+				isoData, err := cidata.GenerateCidataISO(metadata, userdata, networkdata)
+				if err != nil {
+					return fmt.Errorf("error generating cidata ISO: %w", err)
+				}
+
+				pool, err := p.libvirtClient.StoragePoolLookupByName(data.StoragePool)
+				if err != nil {
+					return fmt.Errorf("error looking up storage pool: %w", err)
+				}
+
+				// if volume exists, delete old version
+				if vol, errGetVol := getVol(p.libvirtClient, data.StoragePool, volName); errGetVol == nil {
+					if errVolDel := p.libvirtClient.StorageVolDelete(vol, 0); errVolDel != nil {
+						return fmt.Errorf("delete old cidata volume: %w, name: %s", errVolDel, volName)
+					}
+				}
+
+				volSize := uint64(len(isoData))
+
+				vol, err := createVolume(p.libvirtClient, pool.Name, volName, diskFormatRaw, volSize)
+				if err != nil {
+					return fmt.Errorf("error creating cidata volume: %w", err)
+				}
+
+				err = p.libvirtClient.StorageVolUpload(vol, bytes.NewReader(isoData), 0, 0, 0)
+				if err != nil {
+					return fmt.Errorf("error uploading cidata ISO: %w", err)
+				}
+
+				pctx.State.TypedSpec().Value.CidataVolName = volName
+
+				logger.Info("provisioned cidata ISO", zap.String("volume", volName))
+
+				return nil
+			},
+		),
 
 		provision.NewStep(
 			"createVM",
@@ -370,6 +356,31 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					}
 
 					disks = append(disks, additionalDisk)
+				}
+
+				// add cidata ISO as cdrom, if present
+				cidataVolName := pctx.State.TypedSpec().Value.CidataVolName
+				if cidataVolName != "" {
+					cidataDisk := libvirtxml.DomainDisk{
+						Device: "cdrom",
+						Driver: &libvirtxml.DomainDiskDriver{
+							Name: "qemu",
+							Type: "raw",
+						},
+						Source: &libvirtxml.DomainDiskSource{
+							Volume: &libvirtxml.DomainDiskSourceVolume{
+								Pool:   data.StoragePool,
+								Volume: cidataVolName,
+							},
+						},
+						Target: &libvirtxml.DomainDiskTarget{
+							Dev: "sda",
+							Bus: "sata",
+						},
+						ReadOnly: &libvirtxml.DomainDiskReadOnly{},
+					}
+
+					disks = append(disks, cidataDisk)
 				}
 
 				// assemble network interfaces
@@ -527,103 +538,4 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 			},
 		),
 	}
-}
-
-// Deprovision implements infra.Provisioner.
-func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machine *resources.Machine, machineRequest *infra.MachineRequest) error {
-	vmName := machineRequest.Metadata().ID()
-
-	if vmName == "" {
-		return provision.NewRetryError(errors.New("empty vmName"), time.Second*10)
-	}
-
-	dom, err := p.libvirtClient.DomainLookupByName(vmName)
-	if err != nil {
-		if strings.Contains(err.Error(), "Domain not found") {
-			logger.Info("domain was alredy removed: " + vmName)
-		} else {
-			return fmt.Errorf("fetching domain: %w", err)
-		}
-	} else {
-		logger.Info("found domain " + vmName)
-
-		state, _, err := p.libvirtClient.DomainGetState(dom, 0) //nolint:govet
-		if err != nil {
-			return fmt.Errorf("fetching domain state: %w", err)
-		}
-
-		switch state {
-		case int32(libvirt.DomainRunning):
-			{
-				// in libvirt, "destroy" translates to "shut down" or "power off"
-				err = p.libvirtClient.DomainDestroy(dom)
-				if err != nil {
-					return fmt.Errorf("destroy domain: %w", err)
-				}
-
-				logger.Info("destroyed domain " + vmName)
-
-				return provision.NewRetryInterval(time.Second * 3)
-			}
-		case int32(libvirt.DomainShutdown):
-			return provision.NewRetryInterval(time.Second * 10)
-		case int32(libvirt.DomainShutoff):
-			{
-				// in libvirt, "undefine" translates to "delete a VM"
-				err = p.libvirtClient.DomainUndefine(dom)
-				if err != nil {
-					return fmt.Errorf("undefine VM: %w", err)
-				}
-
-				logger.Info("undefined domain " + vmName)
-			}
-		default:
-			return provision.NewRetryErrorf(time.Second*10, "unknown VM state: %v", state)
-		}
-	}
-
-	poolName := machine.TypedSpec().Value.PoolName
-	volName := machine.TypedSpec().Value.VmVolName
-
-	if poolName == "" || volName == "" {
-		return fmt.Errorf("empty pool/vol names: %s/%s", poolName, volName)
-	}
-
-	vol, err := getVol(p.libvirtClient, poolName, volName)
-	if err != nil {
-		if !errors.Is(err, errVolNoExist) {
-			return fmt.Errorf("error fetching volume: %w", err)
-		}
-
-		logger.Info("volume was removed already: " + volName)
-	} else {
-		err = p.libvirtClient.StorageVolDelete(vol, 0)
-		if err != nil {
-			return fmt.Errorf("error deleting volume: %w", err)
-		}
-
-		logger.Info("removed volume: " + volName)
-	}
-
-	for _, additionalDisk := range machine.TypedSpec().Value.AdditionalDisks {
-		additionalVolume, err := getVol(p.libvirtClient, poolName, additionalDisk.VolName)
-		if err != nil {
-			if !errors.Is(err, errVolNoExist) {
-				return fmt.Errorf("fetching volume %s: %w", additionalDisk.VolName, err)
-			}
-
-			logger.Info("volume was removed already: " + additionalDisk.VolName)
-
-			continue
-		}
-
-		err = p.libvirtClient.StorageVolDelete(additionalVolume, 0)
-		if err != nil {
-			return fmt.Errorf("error deleting volume: %w", err)
-		}
-
-		logger.Info("removed volume: " + additionalDisk.VolName)
-	}
-
-	return nil
 }
