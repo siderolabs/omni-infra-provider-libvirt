@@ -90,6 +90,7 @@ var rootCmd = &cobra.Command{
 		if !libvirtClient.IsConnected() {
 			return errors.New("client is not connected")
 		}
+
 		ver, err := libvirtClient.ConnectGetVersion()
 		if err != nil {
 			return fmt.Errorf("error fetching version: %w", err)

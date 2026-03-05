@@ -79,13 +79,13 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep(
 			"createSchematic",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-				schematicId, err := pctx.GenerateSchematicID(ctx, logger)
+				schematicID, err := pctx.GenerateSchematicID(ctx, logger)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error generating schematic ID: %w", err)
 				}
 
-				pctx.State.TypedSpec().Value.SchematicId = schematicId
-				logger.Info("created schematic " + schematicId)
+				pctx.State.TypedSpec().Value.SchematicId = schematicID
+				logger.Info("created schematic " + schematicID)
 
 				return nil
 			},

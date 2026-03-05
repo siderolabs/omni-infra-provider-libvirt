@@ -34,20 +34,26 @@ func (p *Provisioner) Deprovision(ctx context.Context, logger *zap.Logger, machi
 	poolName := machine.TypedSpec().Value.PoolName
 	volName := machine.TypedSpec().Value.VmVolName
 
-	if poolName == "" || volName == "" {
-		return fmt.Errorf("empty pool/vol names: %s/%s", poolName, volName)
+	if poolName == "" {
+		logger.Warn("pool name is empty, skip disk removal")
+
+		return nil
 	}
 
-	if err := removeVolMain(p.libvirtClient, volName, poolName, logger); err != nil {
-		return err
+	if volName == "" {
+		logger.Warn("vol name is empty, skip main disk removal")
+	} else {
+		if err := removeVolMain(p.libvirtClient, volName, poolName, logger); err != nil {
+			return err
+		}
 	}
 
 	if err := removeVolAdditionalDisks(p.libvirtClient, machine, poolName, logger); err != nil {
-		return err
+		return fmt.Errorf("remove additional volumes: %w", err)
 	}
 
 	if err := removeVolCidata(p.libvirtClient, machine, poolName, logger); err != nil {
-		return err
+		return fmt.Errorf("remove cidata volume: %w", err)
 	}
 
 	return nil
@@ -106,14 +112,14 @@ func removeVolMain(lc *libvirt.Libvirt, volName, poolName string, logger *zap.Lo
 	vol, err := getVol(lc, poolName, volName)
 	if err != nil {
 		if !errors.Is(err, errVolNoExist) {
-			return fmt.Errorf("error fetching volume: %w", err)
+			return fmt.Errorf("fetching volume: %w", err)
 		}
 
 		logger.Info("volume was removed already: " + volName)
 	} else {
 		err = lc.StorageVolDelete(vol, 0)
 		if err != nil {
-			return fmt.Errorf("error deleting volume: %w", err)
+			return fmt.Errorf("deleting volume: %w", err)
 		}
 
 		logger.Info("removed volume: " + volName)
@@ -137,7 +143,7 @@ func removeVolAdditionalDisks(lc *libvirt.Libvirt, machine *resources.Machine, p
 
 		err = lc.StorageVolDelete(additionalVolume, 0)
 		if err != nil {
-			return fmt.Errorf("error deleting volume: %w", err)
+			return fmt.Errorf("deleting volume: %w", err)
 		}
 
 		logger.Info("removed volume: " + additionalDisk.VolName)
@@ -158,7 +164,7 @@ func removeVolCidata(lc *libvirt.Libvirt, machine *resources.Machine, poolName s
 		} else {
 			err = lc.StorageVolDelete(cidataVol, 0)
 			if err != nil {
-				return fmt.Errorf("error deleting cidata volume: %w", err)
+				return fmt.Errorf("delete cidata volume: %w", err)
 			}
 
 			logger.Info("removed cidata volume: " + cidataVolName)
