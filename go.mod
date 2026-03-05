@@ -4,21 +4,21 @@ go 1.25.4
 
 // forked go-yaml that introduces RawYAML interface, which can be used to populate YAML fields using bytes
 // which are then encoded as a valid YAML blocks with proper indentation
-replace gopkg.in/yaml.v3 => github.com/unix4ever/yaml v0.0.0-20220527175918-f17b0f05cf2c
+replace gopkg.in/yaml.v3 => github.com/unix4ever/yaml/v2 v2.4.0
 
 require (
-	github.com/cosi-project/runtime v1.13.0
-	github.com/digitalocean/go-libvirt v0.0.0-20260106181248-56be673cd6a5
+	github.com/cosi-project/runtime v1.14.0
+	github.com/digitalocean/go-libvirt 273eaa321819
 	github.com/google/uuid v1.6.0
 	github.com/kdomanski/iso9660 v0.4.0
 	github.com/planetscale/vtprotobuf v0.6.1-0.20250313105119-ba97887b0a25
-	github.com/siderolabs/omni/client v1.4.7
+	github.com/siderolabs/omni/client v1.5.8
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.27.1
 	golang.org/x/sync v0.19.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.3
-	libvirt.org/go/libvirtxml v1.11010.0
+	libvirt.org/go/libvirtxml v1.12001.0
 )
 
 require (
