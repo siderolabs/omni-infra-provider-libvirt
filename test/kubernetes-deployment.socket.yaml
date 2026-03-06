@@ -1,0 +1,67 @@
+# this deployment assumes that libvirt is running on the same host.
+# it mounts /var/run/libvirt/libvirt-sock from the host into the container.
+# you also have the option to use SSH based authentication.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: omni-infra-provider-libvirt
+  namespace: default
+data:
+  config.yaml: |
+    libvirt:
+      uri: 'qemu:///system'
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: omni-infra-provider-libvirt
+  namespace: default
+type: Opaque
+stringData:
+  # fill in the correct values here
+  OMNI_ENDPOINT: "https://your-omni-instance.example.com"
+  OMNI_SERVICE_ACCOUNT_KEY: "your-service-account-key"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: omni-infra-provider-libvirt
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: omni-infra-provider-libvirt
+  template:
+    metadata:
+      labels:
+        app: omni-infra-provider-libvirt
+    spec:
+      hostNetwork: true
+      containers:
+        - name: omni-infra-provider-libvirt
+          # replace TAG with a valid image tag
+          image: ghcr.io/siderolabs/omni-infra-provider-libvirt:TAG
+          args:
+            - --config-file=/config.yaml
+          envFrom:
+            - secretRef:
+                name: omni-infra-provider-libvirt
+          env:
+            - name: USER
+              value: "omni"
+          volumeMounts:
+            - name: config
+              mountPath: /config.yaml
+              subPath: config.yaml
+            - name: libvirt-sock
+              mountPath: /var/run/libvirt/libvirt-sock
+      volumes:
+        - name: config
+          configMap:
+            name: omni-infra-provider-libvirt
+        - name: libvirt-sock
+          hostPath:
+            path: /var/run/libvirt/libvirt-sock
+            type: Socket
