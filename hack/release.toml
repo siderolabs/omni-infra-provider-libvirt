@@ -5,7 +5,7 @@ project_name = "omni-infra-provider-libvirt"
 github_repo = "siderolabs/omni-infra-provider-libvirt"
 match_deps = "^github.com/(/[a-zA-Z0-9-]+)$"
 
-previous = 'v0.1.0-alpha.0'
+previous = 'v0.1.0-alpha.1'
 # pre_release = true
 
 # [notes]
