@@ -22,8 +22,8 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/sync/errgroup"
-	"gopkg.in/yaml.v3"
 
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/config"
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider"
