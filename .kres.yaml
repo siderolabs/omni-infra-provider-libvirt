@@ -23,7 +23,62 @@ spec:
     - source: api/specs/specs.proto
       subdirectory: specs
 ---
+kind: common.Build
+spec:
+  ignoredPaths:
+    - "hack/test/registries.yaml"
+---
 kind: service.CodeCov
 spec:
   enabled: false
-
+---
+kind: auto.CustomSteps
+spec:
+  steps:
+    - name: run-integration-test
+      toplevel: true
+---
+kind: custom.Step
+name: run-integration-test
+spec:
+  sudoInCI: true
+  makefile:
+    enabled: true
+    depends:
+      - omni-infra-provider-libvirt-linux-amd64
+    script:
+      - >-
+        @hack/test/build-registries.sh
+      - >-
+        @hack/test/integration.sh
+  ghaction:
+    condition: on-pull-request
+    enabled: true
+    parallelJob:
+      name: integration-test
+      runnerGroup: large
+      needsOverride: [default, lint, unit-tests]
+    # If we want label-gated PR runs and/or a nightly cron, add an entry to
+    # ghaction.jobs[] (this is in addition to parallelJob, not replacing it).
+    # See omni-infra-provider-bare-metal/.kres.yaml for the e2e example.
+    # jobs:
+    #   - name: e2e
+    #     runnerGroup: large
+    #     triggerLabels:
+    #       - integration/e2e
+    #     crons:
+    #       - "30 1 * * *"
+    artifacts:
+      enabled: true
+      extraPaths:
+        - "!_out/omni/"
+        - "!_out/libvirt/"
+      additional:
+        - name: omni-logs
+          always: true
+          paths:
+            - "/tmp/libvirt-e2e/*.log"
+        - name: provider-logs
+          always: true
+          paths:
+            - "/tmp/libvirt-e2e/provider.log"

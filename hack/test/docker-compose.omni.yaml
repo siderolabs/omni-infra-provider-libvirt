@@ -1,0 +1,28 @@
+# Stage 2: Omni. Depends on Vault being healthy and the dynamically rendered
+# omni-config.yaml being present at ${OMNI_CONFIG_FILE}.
+
+services:
+  omni:
+    image: ghcr.io/siderolabs/omni:${OMNI_VERSION:-latest}
+    container_name: omni
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    volumes:
+      - ${CERTS_DIR:?CERTS_DIR must be set}:/certs:ro
+      - ${OMNI_OUTPUT_DIR:?OMNI_OUTPUT_DIR must be set}:/_out
+      - ${OMNI_CONFIG_FILE:?OMNI_CONFIG_FILE must be set}:/omni-config.yaml:ro
+    environment:
+      VAULT_TOKEN: dev-o-token
+      VAULT_ADDR: http://127.0.0.1:8200
+      SIDEROLINK_DEV_JOIN_TOKEN: testonly
+    command:
+      - --config-path
+      - /omni-config.yaml
+    depends_on:
+      libvirtd:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
