@@ -1,0 +1,23 @@
+# Example registry-mirror config for the integration test.
+#
+# Drop this file in next to integration.sh as `registries.yaml` to point Omni
+# at registry mirrors. Each entry is "<upstream-host>=<mirror-url>", consumed
+# verbatim as Omni's registries.mirrors[] (see omni schema.json).
+#
+# Useful when:
+#   - the test machine is rate-limited by docker.io / ghcr.io and has a local
+#     pull-through cache available
+#   - running inside a private network where upstream registries are blocked
+#
+# In CI this file is generated automatically by hack/test/build-registries.sh
+# from in-cluster Kubernetes service discovery; this example is for local use.
+
+mirrors: []
+# mirrors:
+#   - docker.io=http://my-mirror.local:5000
+#   - ghcr.io=http://my-mirror.local:5000
+#   - quay.io=http://my-mirror.local:5000
+#   - gcr.io=http://my-mirror.local:5000
+#   - k8s.gcr.io=http://my-mirror.local:5000
+#   - registry.k8s.io=http://my-mirror.local:5000
+#   - factory.talos.dev=http://my-mirror.local:5000

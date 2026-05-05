@@ -1,0 +1,23 @@
+# Stage 4: the libvirt infra provider itself.
+# Image is built fresh each run by integration.sh and tagged ${PROVIDER_IMAGE}
+# (defaults to omni-infra-provider-libvirt:integration-test). The provider
+# config is rendered to ${LIBVIRT_PROVIDER_CONFIG_PATH}; the libvirt socket
+# comes out of the libvirtd container's volume.
+
+services:
+  provider:
+    image: ${PROVIDER_IMAGE:?PROVIDER_IMAGE must be set}
+    container_name: omni-infra-provider-libvirt
+    network_mode: host
+    volumes:
+      - ${LIBVIRT_PROVIDER_CONFIG_PATH:?LIBVIRT_PROVIDER_CONFIG_PATH must be set}:/config.yaml:ro
+      - ${LIBVIRT_SOCKET_DIR:?LIBVIRT_SOCKET_DIR must be set}/libvirt-sock:/var/run/libvirt/libvirt-sock:rw
+    environment:
+      OMNI_SERVICE_ACCOUNT_KEY: ${OMNI_SERVICE_ACCOUNT_KEY:?OMNI_SERVICE_ACCOUNT_KEY must be set}
+    command:
+      - --omni-api-endpoint=https://localhost:8099
+      - --config-file=/config.yaml
+      - --insecure-skip-verify
+    depends_on:
+      omni:
+        condition: service_started

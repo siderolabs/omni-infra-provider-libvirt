@@ -1,6 +1,6 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED, PLEASE DO NOT EDIT.
 #
-# Generated on 2026-04-30T18:35:58Z by kres 1762ab2.
+# Generated on 2026-05-01T08:55:45Z by kres 1762ab2.
 
 # common variables
 
@@ -265,6 +265,10 @@ lint-fmt: lint-golangci-lint-fmt  ## Run all linter formatters and fix up the so
 .PHONY: image-omni-infra-provider-libvirt
 image-omni-infra-provider-libvirt:  ## Builds image for omni-infra-provider-libvirt.
 	@$(MAKE) registry-$@ IMAGE_NAME="omni-infra-provider-libvirt"
+
+run-integration-test: omni-infra-provider-libvirt-linux-amd64
+	@hack/test/build-registries.sh
+	@hack/test/integration.sh
 
 .PHONY: rekres
 rekres:

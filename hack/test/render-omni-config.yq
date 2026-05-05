@@ -1,0 +1,68 @@
+# yq expression: renders the Omni config used by the integration test.
+# Consumed by `yq --null-input --from-file` from hack/test/integration.sh.
+#
+# Required env vars (passed via strenv/env):
+#   VIRBR_IP             - libvirt default network gateway IP (e.g. 192.168.122.1)
+#   AUTH0_TEST_USERNAME  - email of the initial admin user
+#   AUTH0_CLIENT_ID      - Auth0 client ID
+#   AUTH0_DOMAIN         - Auth0 domain
+#   MIRRORS_YAML         - JSON/YAML list literal of registry mirror entries
+#                          (e.g. '["docker.io=http://10.0.0.1:5000"]')
+#
+# Field mapping is per omni's schema.json (x-cli-flag annotations); fields
+# left unspecified inherit defaults via Omni's LoadDefault() merge.
+
+{
+  "services": {
+    "api": {
+      "endpoint": "0.0.0.0:8099",
+      "advertisedURL": "https://localhost:8099/",
+      "certFile": "/certs/localhost.pem",
+      "keyFile": "/certs/localhost-key.pem"
+    },
+    "machineAPI": {
+      "endpoint": "0.0.0.0:8090",
+      "advertisedURL": "grpc://" + strenv(VIRBR_IP) + ":8090"
+    },
+    "siderolink": {
+      "wireGuard": {
+        "endpoint": "0.0.0.0:50180",
+        "advertisedEndpoint": strenv(VIRBR_IP) + ":50180"
+      },
+      "eventSinkPort": 8091
+    }
+  },
+  "auth": {
+    "auth0": {
+      "enabled": true,
+      "clientID": strenv(AUTH0_CLIENT_ID),
+      "domain": strenv(AUTH0_DOMAIN),
+      "initialUsers": [strenv(AUTH0_TEST_USERNAME)]
+    },
+    "initialServiceAccount": {
+      "enabled": true,
+      "keyPath": "/_out/key"
+    }
+  },
+  "storage": {
+    "sqlite": {
+      "path": "db.sql"
+    },
+    "default": {
+      "kind": "etcd",
+      "etcd": {
+        "embedded": true,
+        "embeddedUnsafeFsync": true,
+        "privateKeySource": "vault://secret/omni-private-key",
+        "publicKeyFiles": ["/certs/key.public"]
+      }
+    }
+  },
+  "registries": {
+    "mirrors": env(MIRRORS_YAML)
+  },
+  "eulaAccept": {
+    "name": "Test User",
+    "email": "test-user@siderolabs.com"
+  }
+}
