@@ -233,7 +233,8 @@ func (c *ImageCache) download(ctx context.Context, key, schematicID, talosVersio
 	imagePath := fmt.Sprintf("%s-%s.%s", platform, arch, format)
 	imageURL = imageURL.JoinPath("image", schematicID, talosVersion, imagePath)
 
-	c.logger.Info("downloading image",
+	c.logger.Info(
+		"downloading image",
 		zap.String("schematic_id", schematicID),
 		zap.String("talos_version", talosVersion),
 		zap.String("url", imageURL.String()),
