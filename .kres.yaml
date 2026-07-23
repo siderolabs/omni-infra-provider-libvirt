@@ -16,15 +16,12 @@ spec:
 ---
 kind: golang.Generate
 spec:
+  versionPackagePath: internal/version
   baseSpecPath: /api
   vtProtobufEnabled: true
   specs:
     - source: api/specs/specs.proto
       subdirectory: specs
----
-kind: common.Repository
-spec:
-  enableConform: false
 ---
 kind: service.CodeCov
 spec:

@@ -28,6 +28,7 @@ import (
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/config"
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider"
 	"github.com/siderolabs/omni-infra-provider-libvirt/internal/pkg/provider/meta"
+	"github.com/siderolabs/omni-infra-provider-libvirt/internal/version"
 )
 
 //go:embed data/schema.json
@@ -141,7 +142,7 @@ var rootCmd = &cobra.Command{
 		eg.Go(func() error {
 			return ip.Run(ctx, logger, infra.WithOmniEndpoint(cfg.omniAPIEndpoint), infra.WithClientOptions(
 				clientOptions...,
-			), infra.WithConcurrency(5))
+			), infra.WithConcurrency(5), infra.WithVersion(version.Tag))
 		})
 
 		// this blocks until all goroutines are done
