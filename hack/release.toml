@@ -1,12 +1,16 @@
 # commit to be tagged for the new release
 commit = "HEAD"
 
-project_name = "omni-infra-provider-libvirt"
+project_name = "Omni Infra Provider libvirt"
 github_repo = "siderolabs/omni-infra-provider-libvirt"
-match_deps = "^github.com/(/[a-zA-Z0-9-]+)$"
+match_deps = "^github.com/(siderolabs/[a-zA-Z0-9-]+)$"
 ignore_deps = ["gopkg.in/yaml.v3"]
 
-previous = 'v0.1.0-alpha.1'
-# pre_release = true
+previous = 'v0.1.0'
+pre_release = false
 
-# [notes]
+[notes.versioning-support]
+title = "Add Versioning Support"
+description = """\
+The infra provider will now report its version to Omni.
+"""

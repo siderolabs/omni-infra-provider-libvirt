@@ -1,3 +1,45 @@
+## [Omni Infra Provider libvirt 0.2.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.2.0) (2026-07-23)
+
+Welcome to the v0.2.0 release of Omni Infra Provider libvirt!
+
+
+
+Please try out the release binaries and report any issues at
+https://github.com/siderolabs/omni-infra-provider-libvirt/issues.
+
+### Add Versioning Support
+
+The infra provider will now report its version to Omni.
+
+
+### Contributors
+
+* Fritz Schaal
+* Artem Chernyshev
+* Edward Sammut Alessi
+
+### Changes
+<details><summary>4 commits</summary>
+<p>
+
+* [`746dd25`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/746dd25b4ce6ba517fe29e59500bbee425b4ee1d) feat: rekres and add versioning
+* [`820f097`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/820f0974c3231353e3c1ef3e4713cc989348db24) chore: rekres
+* [`3b90832`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/3b90832552c68f85a3fb1786a293cab5739046ce) chore: rekres, update dependencies
+* [`f98ad32`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/f98ad329579e89b6cfd447509a222240daaec198) chore: bump deps
+</p>
+</details>
+
+### Dependency Changes
+
+* **github.com/cosi-project/runtime**    v1.14.0 -> v1.16.2
+* **github.com/siderolabs/omni/client**  v1.5.8 -> 582730ce940c
+* **go.uber.org/zap**                    v1.27.1 -> v1.28.0
+* **go.yaml.in/yaml/v3**                 v3.0.4 **_new_**
+* **golang.org/x/sync**                  v0.19.0 -> v0.22.0
+* **libvirt.org/go/libvirtxml**          v1.12001.0 -> v1.12002.0
+
+Previous release can be found at [v0.1.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.1.0)
+
 ## [omni-infra-provider-libvirt 0.1.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.1.0) (2026-03-13)
 
 Welcome to the v0.1.0 release of omni-infra-provider-libvirt!
