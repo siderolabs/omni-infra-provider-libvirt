@@ -17,6 +17,7 @@ import (
 
 	"github.com/digitalocean/go-libvirt"
 	"github.com/google/uuid"
+	"github.com/siderolabs/omni/client/pkg/imagefactory"
 	"github.com/siderolabs/omni/client/pkg/infra/provision"
 	"go.uber.org/zap"
 	"libvirt.org/go/libvirtxml"
@@ -77,21 +78,6 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		),
 
 		provision.NewStep(
-			"createSchematic",
-			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-				schematicID, err := pctx.GenerateSchematicID(ctx, logger)
-				if err != nil {
-					return provision.NewRetryErrorf(time.Second*10, "error generating schematic ID: %w", err)
-				}
-
-				pctx.State.TypedSpec().Value.SchematicId = schematicID
-				logger.Info("created schematic " + schematicID)
-
-				return nil
-			},
-		),
-
-		provision.NewStep(
 			"provisionPrimaryDisk",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
 				var data Data
@@ -101,15 +87,26 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					return err
 				}
 
-				schematicID := pctx.State.TypedSpec().Value.SchematicId
-				talosVersion := pctx.GetTalosVersion()
+				media, err := pctx.EnsureInstallationMedia(ctx, logger, provision.MediaSpec{
+					MediaSpec: imagefactory.MediaSpec{
+						Kind:         imagefactory.InstallationMediaKindDisk,
+						Platform:     imagePlatform,
+						Architecture: imageArchitecture,
+						Format:       imageFormat,
+					},
+				})
+				if err != nil {
+					return provision.NewRetryErrorf(time.Second*10, "error resolving the installation medium: %w", err)
+				}
+
+				pctx.State.TypedSpec().Value.SchematicId = media.SchematicID
 
 				// Acquire image from cache (downloads if needed, deduplicates concurrent requests)
-				filePath, err := p.imageCache.Acquire(ctx, schematicID, talosVersion)
+				filePath, err := p.imageCache.Acquire(ctx, media)
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error fetching image: %w", err)
 				}
-				defer p.imageCache.Release(schematicID, talosVersion)
+				defer p.imageCache.Release(media.StorageKey)
 
 				vmName := pctx.GetRequestID()
 				volName := fmt.Sprintf("%s.qcow2", vmName)

@@ -9,19 +9,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/siderolabs/omni/client/pkg/constants"
+	"github.com/siderolabs/omni/client/pkg/imagefactory"
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"
 )
 
 const (
+	// The installation medium this provider always fetches: libvirt VMs boot a compressed nocloud disk image.
+	imagePlatform     = "nocloud"
+	imageArchitecture = "amd64"
+	imageFormat       = "qcow2.gz"
+
 	// DefaultCachePath is the default directory for caching downloaded images.
 	DefaultCachePath = "/tmp/omni-libvirt-cache"
 
@@ -66,16 +71,17 @@ func NewImageCache(logger *zap.Logger, imageCachePath string) *ImageCache {
 	}
 }
 
-// cacheKey generates a unique cache key for an image.
-func cacheKey(schematicID, talosVersion string) string {
-	return fmt.Sprintf("%s-%s.qcow2.gz", schematicID, talosVersion)
-}
-
 // Acquire increments the reference count for an image and downloads it, if necessary.
 // Returns the path to the cached image file.
 // The caller must call Release() when done with the image.
-func (c *ImageCache) Acquire(ctx context.Context, schematicID, talosVersion string) (string, error) {
-	key := cacheKey(schematicID, talosVersion)
+//
+// The medium comes from the provision context, so it points at whichever factory Omni is configured
+// with and carries whatever the fetch must present: on-prem and authenticated factories need no
+// configuration here. Omni's storage key is the cache filename as-is: it already covers everything that
+// decides the image's content, including the Talos version and the format, and unlike the URL it does
+// not change when the factory credentials rotate.
+func (c *ImageCache) Acquire(ctx context.Context, media imagefactory.InstallationMedia) (string, error) {
+	key := media.StorageKey
 	filePath := filepath.Join(c.CachePath, key)
 
 	// Increment reference count
@@ -97,7 +103,7 @@ func (c *ImageCache) Acquire(ctx context.Context, schematicID, talosVersion stri
 		}
 
 		// Download the image
-		err := c.download(ctx, key, schematicID, talosVersion)
+		err := c.download(ctx, key, media)
 
 		return nil, err
 	})
@@ -119,16 +125,14 @@ func (c *ImageCache) Acquire(ctx context.Context, schematicID, talosVersion stri
 }
 
 // Release decrements the reference count for an image and updates the last used time.
-func (c *ImageCache) Release(schematicID, talosVersion string) {
-	key := cacheKey(schematicID, talosVersion)
-
+func (c *ImageCache) Release(storageKey string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.refs[key]--
-	if c.refs[key] <= 0 {
-		delete(c.refs, key)
-		c.lastUsed[key] = time.Now()
+	c.refs[storageKey]--
+	if c.refs[storageKey] <= 0 {
+		delete(c.refs, storageKey)
+		c.lastUsed[storageKey] = time.Now()
 	}
 }
 
@@ -218,36 +222,26 @@ func (c *ImageCache) cleanup() {
 
 // download fetches an image from the image factory and saves it to the cache.
 // It uses a temporary file and atomic rename to prevent partial downloads.
-func (c *ImageCache) download(ctx context.Context, key, schematicID, talosVersion string) error {
-	imageURL, err := url.Parse(constants.ImageFactoryBaseURL)
-	if err != nil {
-		return fmt.Errorf("failed to parse image factory URL: %w", err)
-	}
-
-	const (
-		arch     = "amd64"
-		format   = "qcow2.gz"
-		platform = "nocloud"
-	)
-
-	imagePath := fmt.Sprintf("%s-%s.%s", platform, arch, format)
-	imageURL = imageURL.JoinPath("image", schematicID, talosVersion, imagePath)
-
+func (c *ImageCache) download(ctx context.Context, key string, media imagefactory.InstallationMedia) error {
+	// media.URL is left out on purpose: it can carry the factory credentials or a download token.
 	c.logger.Info(
 		"downloading image",
-		zap.String("schematic_id", schematicID),
-		zap.String("talos_version", talosVersion),
-		zap.String("url", imageURL.String()),
+		zap.String("key", key),
+		zap.String("schematic_id", media.SchematicID),
+		zap.String("image_factory_host", media.ImageFactoryHost),
 	)
 
 	// Use context.WithoutCancel to ensure we complete the download
 	// even if the parent context is canceled
 	reqCtx := context.WithoutCancel(ctx)
 
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, imageURL.String(), nil)
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, media.URL, nil)
 	if err != nil {
 		return fmt.Errorf("error creating request: %w", err)
 	}
+
+	// Whatever the factory needs is either in these headers or already in the URL.
+	maps.Copy(req.Header, media.Headers)
 
 	client := http.Client{
 		Timeout: timeout,
