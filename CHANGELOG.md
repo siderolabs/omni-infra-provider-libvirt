@@ -1,3 +1,41 @@
+## [Omni Infra Provider libvirt 0.3.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.3.0) (2026-09-01)
+
+Welcome to the v0.3.0 release of Omni Infra Provider libvirt!
+
+
+
+Please try out the release binaries and report any issues at
+https://github.com/siderolabs/omni-infra-provider-libvirt/issues.
+
+### Contributors
+
+* Fritz Schaal
+* Oguz Kilcan
+
+### Changes
+<details><summary>5 commits</summary>
+<p>
+
+* [`13c631b`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/13c631bae77884fcb99ec2f1d6d80077d7b1a9ab) chore: bump dependencies, rekres
+* [`8c883fd`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/8c883fdbaa66d7a311748de3a2b294fad480872f) chore: make vnc default for graphics
+* [`6e5282d`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/6e5282d2b4a788f4b53d0e64483d52c618556058) fix: set correct sata disk type and dev name
+* [`b273bef`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/b273bef5f0a11f0b6eab6aaa00049a6c285027c4) fix: limit disk serial length to 20
+* [`e16c55e`](https://github.com/siderolabs/omni-infra-provider-libvirt/commit/e16c55e3a5b35b094a0e82bb35fd07496f9b759f) feat: resolve disk images through Omni's installation media API
+</p>
+</details>
+
+### Dependency Changes
+
+* **github.com/cosi-project/runtime**     v1.16.2 -> v1.16.3
+* **github.com/digitalocean/go-libvirt**  273eaa321819 -> 1a83157e1858
+* **github.com/planetscale/vtprotobuf**   ba97887b0a25 -> 8ae5a48058df
+* **github.com/siderolabs/omni/client**   582730ce940c -> b1341200b16d
+* **go.yaml.in/yaml/v3**                  v3.0.4 -> v3.0.5
+* **google.golang.org/protobuf**          f2248ac996af -> v1.36.12
+* **libvirt.org/go/libvirtxml**           v1.12002.0 -> v1.12005.0
+
+Previous release can be found at [v0.2.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.2.0)
+
 ## [Omni Infra Provider libvirt 0.2.0](https://github.com/siderolabs/omni-infra-provider-libvirt/releases/tag/v0.2.0) (2026-07-23)
 
 Welcome to the v0.2.0 release of Omni Infra Provider libvirt!

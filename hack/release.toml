@@ -6,11 +6,5 @@ github_repo = "siderolabs/omni-infra-provider-libvirt"
 match_deps = "^github.com/(siderolabs/[a-zA-Z0-9-]+)$"
 ignore_deps = ["gopkg.in/yaml.v3"]
 
-previous = 'v0.1.0'
+previous = 'v0.2.0'
 pre_release = false
-
-[notes.versioning-support]
-title = "Add Versioning Support"
-description = """\
-The infra provider will now report its version to Omni.
-"""
