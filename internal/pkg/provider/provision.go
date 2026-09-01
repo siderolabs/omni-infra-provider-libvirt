@@ -33,6 +33,7 @@ const (
 	diskFormatQcow2  = "qcow2"
 	diskFormatRaw    = "raw"
 	maxDiskSerialLen = 20
+	maxSataPorts     = 6
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -317,16 +318,24 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						}
 					case "sata":
 						{
+							if sataDiskCount >= maxSataPorts {
+								// hint: cidata (cdrom) uses one sata port
+								return fmt.Errorf(
+									"too many sata disks, at most %d are supported",
+									maxSataPorts-1,
+								)
+							}
+
 							idx := sataDiskCount
 
 							s := ""
 							for idx >= 0 {
-								s = fmt.Sprint(rune('a'+(idx%26))) + s
+								s = string(rune('a'+(idx%26))) + s
 								idx = idx/26 - 1
 							}
 
 							dev = fmt.Sprintf("sd%s", s)
-							bus = "virtio"
+							bus = "sata"
 							sataDiskCount++
 						}
 					default:
