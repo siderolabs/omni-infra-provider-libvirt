@@ -10,6 +10,7 @@ spec:
       memory: 4096 # in MB
       disk_size: 20 # in GB
       storage_pool: "default"
+      graphics: "vnc"
       network_interfaces:
         - driver: "virtio"
           network_name: "default"
@@ -26,6 +27,7 @@ spec:
       memory: 8192 # in MB
       disk_size: 20 # in GB
       storage_pool: "default"
+      graphics: "vnc"
       network_interfaces:
         - driver: virtio
           network_name: "default"
@@ -47,6 +49,7 @@ spec:
       memory: 32000 # in MB
       disk_size: 20 # in GB
       storage_pool: "vmstorage"
+      graphics: "vnc"
       network_interfaces:
         - driver: virtio
           network_name: "default"

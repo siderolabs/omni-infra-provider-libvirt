@@ -34,6 +34,9 @@ const (
 	diskFormatRaw    = "raw"
 	maxDiskSerialLen = 20
 	maxSataPorts     = 6
+	graphicsVNC      = "vnc"
+	graphicsSpice    = "spice"
+	graphicsNone     = "none"
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -415,6 +418,47 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					networkInterfaces = append(networkInterfaces, iface)
 				}
 
+				// assemble graphics and video devices
+				defaultVideoResolution := &libvirtxml.DomainVideoResolution{X: 1920, Y: 1080}
+				videos := []libvirtxml.DomainVideo{
+					{
+						Model: libvirtxml.DomainVideoModel{
+							Type:       "virtio",
+							Resolution: defaultVideoResolution,
+						},
+					},
+				}
+
+				var graphics []libvirtxml.DomainGraphic
+
+				switch data.Graphics {
+				case graphicsVNC, "":
+					graphics = append(graphics, libvirtxml.DomainGraphic{
+						VNC: &libvirtxml.DomainGraphicVNC{
+							AutoPort: "yes",
+						},
+					})
+				case graphicsSpice:
+					// note: RedHat apparently dropped support for this upstream.
+					//       Your mileage might vary, depending on your libvirtd build.
+					graphics = append(graphics, libvirtxml.DomainGraphic{
+						Spice: &libvirtxml.DomainGraphicSpice{
+							AutoPort: "yes",
+						},
+					})
+				case graphicsNone:
+					// headless, for use with serial console
+					videos = []libvirtxml.DomainVideo{
+						{
+							Model: libvirtxml.DomainVideoModel{
+								Type: "none",
+							},
+						},
+					}
+				default:
+					return fmt.Errorf("unknown graphics type: %q", data.Graphics)
+				}
+
 				// generate libvirt XML spec
 				// https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainCreateXML
 				domData := libvirtxml.Domain{
@@ -469,35 +513,16 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						MemBalloon: &libvirtxml.DomainMemBalloon{
 							Model: "virtio",
 						},
-						Serials: []libvirtxml.DomainSerial{
-							// { Target: &libvirtxml.DomainSerialTarget{Type: "pty",}},
-						},
+						Serials: []libvirtxml.DomainSerial{},
 						Consoles: []libvirtxml.DomainConsole{
 							{
 								Target: &libvirtxml.DomainConsoleTarget{
 									Type: "serial",
 								},
 							},
-							// {Target: &libvirtxml.DomainConsoleTarget{Type: "virtio"}},
 						},
-						Videos: []libvirtxml.DomainVideo{
-							{
-								Model: libvirtxml.DomainVideoModel{
-									Type: "virtio",
-									Resolution: &libvirtxml.DomainVideoResolution{
-										X: 1920,
-										Y: 1080,
-									},
-								},
-							},
-						},
-						Graphics: []libvirtxml.DomainGraphic{
-							{
-								Spice: &libvirtxml.DomainGraphicSpice{
-									AutoPort: "yes",
-								},
-							},
-						},
+						Videos:   videos,
+						Graphics: graphics,
 					},
 				}
 

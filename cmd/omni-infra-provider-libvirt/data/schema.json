@@ -23,6 +23,16 @@
       "default": "default",
       "description": "libvirt storage pool name"
     },
+    "graphics": {
+      "type": "string",
+      "enum": [
+        "vnc",
+        "spice",
+        "none"
+      ],
+      "default": "vnc",
+      "description": "Graphics device type."
+    },
     "additional_disks": {
       "type": "array",
       "description": "List of secondary disks.",
