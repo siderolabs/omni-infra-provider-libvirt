@@ -28,10 +28,11 @@ import (
 )
 
 const (
-	MiB             = uint64(1024 * 1024)
-	GiB             = MiB * 1024
-	diskFormatQcow2 = "qcow2"
-	diskFormatRaw   = "raw"
+	MiB              = uint64(1024 * 1024)
+	GiB              = MiB * 1024
+	diskFormatQcow2  = "qcow2"
+	diskFormatRaw    = "raw"
+	maxDiskSerialLen = 20
 )
 
 // Provisioner implements Talos emulator infra provider.
@@ -301,7 +302,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					nvmeDiskCount = 0
 				)
 
-				for _, additionalDisk := range pctx.State.TypedSpec().Value.AdditionalDisks {
+				// disk serials are derived from the machine UUID, so they stay stable across provisioning attempts
+				uuidHex := strings.ReplaceAll(pctx.State.TypedSpec().Value.Uuid, "-", "")
+
+				for diskIdx, additionalDisk := range pctx.State.TypedSpec().Value.AdditionalDisks {
 					var dev, bus string
 
 					switch additionalDisk.Type {
@@ -331,6 +335,9 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 						}
 					}
 
+					suffix := fmt.Sprintf("-%d", diskIdx)
+					serial := uuidHex[:maxDiskSerialLen-len(suffix)] + suffix
+
 					additionalDisk := libvirtxml.DomainDisk{
 						Device: "disk",
 						Driver: &libvirtxml.DomainDiskDriver{
@@ -349,7 +356,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 							Dev: dev,
 							Bus: bus,
 						},
-						Serial: uuid.NewString(),
+						Serial: serial,
 					}
 
 					disks = append(disks, additionalDisk)
