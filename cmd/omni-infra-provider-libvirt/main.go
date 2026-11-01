@@ -142,7 +142,7 @@ var rootCmd = &cobra.Command{
 		eg.Go(func() error {
 			return ip.Run(ctx, logger, infra.WithOmniEndpoint(cfg.omniAPIEndpoint), infra.WithClientOptions(
 				clientOptions...,
-			), infra.WithConcurrency(5), infra.WithVersion(version.Tag))
+			), infra.WithConcurrency(5), infra.WithVersion(version.Tag), infra.WithEncodeRequestIDsIntoTokens())
 		})
 
 		// this blocks until all goroutines are done

@@ -97,7 +97,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					Platform:     imagePlatform,
 					Architecture: imageArchitecture,
 					Format:       imageFormat,
-				})
+				}, provision.WithoutConnectionParams()) // join config is passed through the cidata user-data
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error resolving the installation medium: %w", err)
 				}
@@ -196,7 +196,7 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 		provision.NewStep(
 			"provisionCidata",
 			func(ctx context.Context, logger *zap.Logger, pctx provision.Context[*resources.Machine]) error {
-				// create CIDATA for nocloud, contains the hostname
+				// create CIDATA for nocloud, contains the hostname and the Omni join config
 				// docs: https://docs.siderolabs.com/talos/latest/platform-specific-installations/cloud-platforms/nocloud#cdrom%2Fusb
 				var data Data
 
@@ -210,8 +210,8 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 					volName = fmt.Sprintf("%s-cidata.iso", vmName)
 
 					metadata    = bytes.NewReader(cidata.MetaData(vmName))
-					userdata    = bytes.NewReader([]byte("#cloud-config\n")) // empty
-					networkdata = bytes.NewReader(cidata.NetworkData())      // TODO: allow to be passed by user?
+					userdata    = bytes.NewReader([]byte(pctx.ConnectionParams.JoinConfig))
+					networkdata = bytes.NewReader(cidata.NetworkData()) // TODO: allow to be passed by user?
 				)
 
 				isoData, err := cidata.GenerateCidataISO(metadata, userdata, networkdata)
