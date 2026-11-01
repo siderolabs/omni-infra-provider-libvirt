@@ -93,12 +93,10 @@ func (p *Provisioner) ProvisionSteps() []provision.Step[*resources.Machine] {
 				}
 
 				media, err := pctx.EnsureInstallationMedia(ctx, logger, provision.MediaSpec{
-					MediaSpec: imagefactory.MediaSpec{
-						Kind:         imagefactory.InstallationMediaKindDisk,
-						Platform:     imagePlatform,
-						Architecture: imageArchitecture,
-						Format:       imageFormat,
-					},
+					Kind:         imagefactory.InstallationMediaKindDisk,
+					Platform:     imagePlatform,
+					Architecture: imageArchitecture,
+					Format:       imageFormat,
 				})
 				if err != nil {
 					return provision.NewRetryErrorf(time.Second*10, "error resolving the installation medium: %w", err)
