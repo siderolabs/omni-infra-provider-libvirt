@@ -1,0 +1,44 @@
+# Stage 1: stateless infrastructure (libvirtd + vault).
+# Brought up before any dynamic configuration is generated.
+
+services:
+  libvirtd:
+    build:
+      context: .
+      dockerfile: Dockerfile.libvirtd
+    image: libvirtd-test:latest
+    container_name: libvirtd
+    privileged: true
+    network_mode: host
+    devices:
+      - /dev/kvm
+    environment:
+      LIBVIRT_NETWORK: ${LIBVIRT_NETWORK:?LIBVIRT_NETWORK must be set}
+      LIBVIRT_BRIDGE: ${LIBVIRT_BRIDGE:?LIBVIRT_BRIDGE must be set}
+      LIBVIRT_POOL: ${LIBVIRT_POOL:?LIBVIRT_POOL must be set}
+      LIBVIRT_GATEWAY: ${LIBVIRT_GATEWAY:?LIBVIRT_GATEWAY must be set}
+      LIBVIRT_DHCP_START: ${LIBVIRT_DHCP_START:?LIBVIRT_DHCP_START must be set}
+      LIBVIRT_DHCP_END: ${LIBVIRT_DHCP_END:?LIBVIRT_DHCP_END must be set}
+    volumes:
+      - ${LIBVIRT_SOCKET_DIR:?LIBVIRT_SOCKET_DIR must be set}:/var/run/libvirt
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /run/libvirt-ready"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+      start_period: 2s
+
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: vault-dev
+    network_mode: host
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-o-token
+    healthcheck:
+      test: ["CMD-SHELL", "VAULT_ADDR=http://127.0.0.1:8200 vault status >/dev/null 2>&1"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
+      start_period: 2s

@@ -1,0 +1,24 @@
+FROM ubuntu:24.04
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libvirt-daemon-system \
+        libvirt-clients \
+        qemu-kvm \
+        qemu-utils \
+        iptables \
+        iproute2 \
+        dnsmasq-base \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Run QEMU as root without a security driver: there is no AppArmor or SELinux
+# inside the container, and root avoids permission issues on /dev/kvm and
+# the image directory.
+RUN printf 'user = "root"\ngroup = "root"\nsecurity_driver = "none"\n' >> /etc/libvirt/qemu.conf
+
+COPY libvirtd-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+VOLUME ["/var/run/libvirt", "/var/lib/libvirt/images"]
+
+ENTRYPOINT ["/entrypoint.sh"]
