@@ -287,6 +287,10 @@ sign-image-omni-infra-provider-libvirt:  ## Signs the image for omni-infra-provi
 	    $(IMAGE_SIGNER_IMAGE) sign --timeout=15m \
 	    $(REGISTRY)/$(USERNAME)/omni-infra-provider-libvirt:$(IMAGE_TAG)
 
+run-integration-test: omni-infra-provider-libvirt-linux-amd64
+	@hack/test/build-registries.sh
+	@hack/test/integration.sh
+
 .PHONY: rekres
 rekres:
 	@docker pull $(KRES_IMAGE)
