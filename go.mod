@@ -8,17 +8,18 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/kdomanski/iso9660 v0.4.0
 	github.com/planetscale/vtprotobuf v0.6.1-0.20260702190614-8ae5a48058df
-	github.com/siderolabs/omni/client v1.13.3
+	github.com/siderolabs/omni/client v1.14.1
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.6
+	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/sync v0.25.0
 	google.golang.org/protobuf v1.36.12
 	libvirt.org/go/libvirtxml v1.12008.0
 )
 
 require (
-	cel.dev/cel-go v0.33.2 // indirect
+	cel.dev/cel-go v0.33.4 // indirect
 	cel.dev/expr v0.26.0 // indirect
 	github.com/ProtonMail/go-crypto v1.5.2 // indirect
 	github.com/ProtonMail/gopenpgp/v3 v3.5.2 // indirect
@@ -55,7 +56,7 @@ require (
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.33.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.34.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -98,11 +99,10 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.5 // indirect
-	go.yaml.in/yaml/v4 v4.0.0 // indirect
 	go4.org/netipx v0.0.0-20260823151212-3075585bcbeb // indirect
 	golang.org/x/crypto v0.59.0 // indirect
-	golang.org/x/exp v0.0.0-20261112173441-d10d3b464990 // indirect
-	golang.org/x/net v0.62.0 // indirect
+	golang.org/x/exp v0.0.0-20261113113407-e3970619a1a4 // indirect
+	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/oauth2 v0.38.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
